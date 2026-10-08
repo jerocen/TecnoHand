@@ -16,6 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,14 +29,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,7 +73,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +82,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.atom.tecnohandapp.data.models.AccessLogItem
+import com.atom.tecnohandapp.data.models.QrValidationResponse
+import com.atom.tecnohandapp.ui.ScanQrViewModel
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 
@@ -73,15 +98,19 @@ private val ReticleBlueColor = Color(0xFF5A82ED)
 private val ConfirmButtonColor = Color(0xFF5A82ED)
 private val DarkTextColor = Color(0xFF0A1838)
 private val SubtitleGrayColor = Color(0xFF64748B)
+private val SuccessGreenColor = Color(0xFF10B981)
+private val ErrorRedColor = Color(0xFFEF4444)
 
 @Composable
 fun ScanQrScreen(
+    viewModel: ScanQrViewModel = viewModel(),
     onConfirmScan: () -> Unit = {},
-    onManualInput: () -> Unit = {},
-    onQrCodeDetected: (String) -> Unit = {}
+    onManualInput: () -> Unit = {}
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val isPreview = LocalInspectionMode.current
+
     var hasCameraPermission by remember {
         mutableStateOf(
             if (isPreview) true else
@@ -114,28 +143,58 @@ fun ScanQrScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
                 painter = painterResource(id = R.drawable.tecnohand_logo),
                 contentDescription = "Logo TecnoHand",
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier.size(48.dp),
                 contentScale = ContentScale.Fit
             )
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = "Escanear QR de Acceso",
                 color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
             )
+
+            // History Button
+            IconButton(
+                onClick = { viewModel.loadAccessHistory() },
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.12f), CircleShape)
+                    .size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "Historial",
+                    tint = Color.White
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Server Config Button
+            IconButton(
+                onClick = { viewModel.setShowServerConfigDialog(true) },
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.12f), CircleShape)
+                    .size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Configurar Servidor API",
+                    tint = Color.White
+                )
+            }
         }
 
         // --- White Body Card Container ---
         Surface(
-            modifier = Modifier
-                .fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             color = ContainerBgColor
         ) {
@@ -169,7 +228,9 @@ fun ScanQrScreen(
                         } else {
                             CameraPreviewView(
                                 modifier = Modifier.fillMaxSize(),
-                                onQrCodeDetected = onQrCodeDetected
+                                onQrCodeDetected = { code ->
+                                    viewModel.onQrDetected(code)
+                                }
                             )
                         }
                         // Overlaid QR Framing Reticle
@@ -177,16 +238,49 @@ fun ScanQrScreen(
                             modifier = Modifier.fillMaxSize(),
                             bracketColor = ReticleBlueColor
                         )
-                        // Text at the bottom inside camera preview
-                        Text(
-                            text = "Apunte al código QR...",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Normal,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 24.dp)
-                        )
+
+                        // Loading overlay or Detected status bar
+                        if (uiState.isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.6f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(color = Color.White)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "Verificando QR con el servidor...",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        } else {
+                            // Text at the bottom inside camera preview
+                            val statusText = if (!uiState.lastDetectedToken.isNullOrBlank()) {
+                                "Detectado: ${uiState.lastDetectedToken}"
+                            } else {
+                                "Apunte al código QR..."
+                            }
+
+                            Text(
+                                text = statusText,
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Normal,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 24.dp)
+                                    .background(
+                                        Color.Black.copy(alpha = 0.6f),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
                     } else {
                         // Fallback UI when permission is not granted
                         Column(
@@ -218,23 +312,37 @@ fun ScanQrScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                // --- Confirm Button ---
+                // --- Confirm Scan Button ---
                 Button(
-                    onClick = onConfirmScan,
+                    onClick = {
+                        val token = uiState.lastDetectedToken
+                        if (!token.isNullOrBlank()) {
+                            viewModel.validarAcceso(token, "entrada")
+                        } else {
+                            viewModel.setShowManualDialog(true)
+                        }
+                        onConfirmScan()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = ConfirmButtonColor
                     )
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Confirmar Escaneo",
                         color = Color.White,
-                        fontSize = 17.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -243,10 +351,13 @@ fun ScanQrScreen(
 
                 // --- Manual Input Button ---
                 OutlinedButton(
-                    onClick = onManualInput,
+                    onClick = {
+                        viewModel.setShowManualDialog(true)
+                        onManualInput()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(
                         width = 1.5.dp,
@@ -260,24 +371,478 @@ fun ScanQrScreen(
                     Text(
                         text = "Ingreso Manual",
                         color = DarkTextColor,
-                        fontSize = 17.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // --- Footer Hint Text ---
                 Text(
                     text = "Use ingreso manual si el QR no es legible.",
                     color = SubtitleGrayColor,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
         }
     }
+
+    // --- Dialogs & Result Sheets ---
+    if (uiState.showResultSheet && uiState.validationResponse != null) {
+        ScanResultDialog(
+            response = uiState.validationResponse!!,
+            onDismiss = { viewModel.dismissResultSheet() },
+            onRegistrarSalida = { token ->
+                viewModel.validarAcceso(token, "salida")
+            }
+        )
+    }
+
+    if (uiState.showManualDialog) {
+        ManualInputDialog(
+            onDismiss = { viewModel.setShowManualDialog(false) },
+            onValidar = { token, tipo ->
+                viewModel.validarAcceso(token, tipo)
+            }
+        )
+    }
+
+    if (uiState.showServerConfigDialog) {
+        ServerConfigDialog(
+            currentUrl = uiState.serverUrl,
+            onDismiss = { viewModel.setShowServerConfigDialog(false) },
+            onSave = { newUrl ->
+                viewModel.updateServerUrl(newUrl)
+            }
+        )
+    }
+
+    if (uiState.showHistoryDialog) {
+        HistoryDialog(
+            logs = uiState.historyLogs,
+            isLoading = uiState.isHistoryLoading,
+            onDismiss = { viewModel.setShowHistoryDialog(false) }
+        )
+    }
+}
+
+@Composable
+private fun ScanResultDialog(
+    response: QrValidationResponse,
+    onDismiss: () -> Unit,
+    onRegistrarSalida: (String) -> Unit
+) {
+    val isPermitido = response.valido || response.resultado == "permitido"
+    val headerBgColor = if (isPermitido) SuccessGreenColor else ErrorRedColor
+    val headerTitle = if (isPermitido) "¡Acceso PERMITIDO!" else "Acceso RECHAZADO"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Entendido / Escanear Otro", color = Color.White)
+            }
+        },
+        dismissButton = {
+            if (isPermitido && response.detalles != null) {
+                OutlinedButton(
+                    onClick = {
+                        response.detalles.nombre?.let {
+                            onRegistrarSalida(it)
+                        } ?: onDismiss()
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Marcar Salida")
+                }
+            }
+        },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = if (isPermitido) Icons.Default.CheckCircle else Icons.Default.Error,
+                    contentDescription = null,
+                    tint = headerBgColor,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = headerTitle,
+                    color = headerBgColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = response.mensaje ?: response.motivo ?: "",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = DarkTextColor
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                response.detalles?.let { det ->
+                    DetailRow(label = "Persona:", value = det.nombre ?: "N/A")
+                    DetailRow(
+                        label = "Tipo:",
+                        value = if (det.tipo == "invitado") "Invitado/Visitante" else "Usuario Registrado"
+                    )
+                    if (!det.residente.isNullOrBlank()) {
+                        DetailRow(label = "Residente:", value = det.residente)
+                    }
+                    if (!det.direccion.isNullOrBlank()) {
+                        DetailRow(label = "Vivienda:", value = det.direccion)
+                    }
+                    if (!det.colonia.isNullOrBlank()) {
+                        DetailRow(label = "Colonia:", value = det.colonia)
+                    }
+                    if (det.usosRestantes != null) {
+                        DetailRow(label = "Usos Restantes:", value = "${det.usosRestantes}")
+                    }
+                }
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+        containerColor = Color.White
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = SubtitleGrayColor,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            color = DarkTextColor,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+@Composable
+private fun ManualInputDialog(
+    onDismiss: () -> Unit,
+    onValidar: (token: String, tipo: String) -> Unit
+) {
+    var tokenText by remember { mutableStateOf("") }
+    var selectedTipo by remember { mutableStateOf("entrada") }
+
+    val sampleTokens = listOf(
+        "QR_PEDRO_001",
+        "QR_MARIA_001",
+        "QR_JORGE_001",
+        "QR_PAULA_001",
+        "QR_RESIDENTE_ANA"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Ingreso Manual de QR",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = DarkTextColor
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Ingrese o seleccione la clave del código QR:",
+                    fontSize = 13.sp,
+                    color = SubtitleGrayColor
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = tokenText,
+                    onValueChange = { tokenText = it },
+                    label = { Text("Código QR (ej: QR_PEDRO_001)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Códigos de Prueba Rápidos:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SubtitleGrayColor
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(sampleTokens) { token ->
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = ConfirmButtonColor.copy(alpha = 0.12f),
+                            modifier = Modifier.clickable { tokenText = token }
+                        ) {
+                            Text(
+                                text = token,
+                                color = ConfirmButtonColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { selectedTipo = "entrada" }
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (selectedTipo == "entrada") ConfirmButtonColor else Color.LightGray,
+                            modifier = Modifier.size(16.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Entrada", fontSize = 14.sp)
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { selectedTipo = "salida" }
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (selectedTipo == "salida") ConfirmButtonColor else Color.LightGray,
+                            modifier = Modifier.size(16.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Salida", fontSize = 14.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (tokenText.isNotBlank()) {
+                        onValidar(tokenText.trim(), selectedTipo)
+                    }
+                },
+                enabled = tokenText.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Validar Acceso", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+        containerColor = Color.White
+    )
+}
+
+@Composable
+private fun ServerConfigDialog(
+    currentUrl: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var urlText by remember { mutableStateOf(currentUrl) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Configuración de Servidor API", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        },
+        text = {
+            Column {
+                Text(
+                    "Especifique la URL base del backend Node.js TecnoHand:",
+                    fontSize = 13.sp,
+                    color = SubtitleGrayColor
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = urlText,
+                    onValueChange = { urlText = it },
+                    label = { Text("URL Base de la API") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Presets Rápidos:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedButton(
+                        onClick = { urlText = "http://10.0.2.2:3000/api/" },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Emulador (10.0.2.2)", fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = { urlText = "http://localhost:3000/api/" },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Localhost", fontSize = 11.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(urlText) },
+                colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
+            ) {
+                Text("Guardar", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+private fun HistoryDialog(
+    logs: List<AccessLogItem>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Historial de Accesos Registrados", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = ConfirmButtonColor)
+                } else if (logs.isEmpty()) {
+                    Text("No hay registros de acceso en la base de datos", color = SubtitleGrayColor, fontSize = 13.sp)
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(logs) { log ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFF8FAFC)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (log.resultado == "permitido") SuccessGreenColor else ErrorRedColor,
+                                        modifier = Modifier.size(10.dp)
+                                    ) {}
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = log.personaNombre ?: "Acceso sin nombre",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = DarkTextColor
+                                        )
+                                        Text(
+                                            text = "${log.tipo.uppercase()} • ${log.viviendaDireccion ?: log.colonia}",
+                                            fontSize = 11.sp,
+                                            color = SubtitleGrayColor
+                                        )
+                                        Text(
+                                            text = "Guardia: ${log.guardia} | ${log.fechaHora}",
+                                            fontSize = 10.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
+            ) {
+                Text("Cerrar", color = Color.White)
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
 }
 
 @Composable
