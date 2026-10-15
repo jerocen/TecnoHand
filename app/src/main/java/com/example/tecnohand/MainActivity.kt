@@ -199,7 +199,7 @@ fun FormularioBreveScreen(
                                 numero = numero.trim(),
                                 fecha = fecha.trim(),
                                 hora = hora.trim(),
-                                horasExpiracion = expiracion.substringBefore(" ").toInt()
+                                minutosExpiracion = expiracionAMinutos(expiracion)
                             )
                         )
                     }
@@ -410,7 +410,7 @@ private fun CampoExpiracion(
     onSeleccion: (String) -> Unit
 ) {
     var expandido by remember { mutableStateOf(false) }
-    val opciones = listOf("1 hora", "6 horas", "12 horas", "24 horas")
+    val opciones = listOf("1 minuto (prueba)", "1 hora", "6 horas", "12 horas", "24 horas")
 
     Column {
         Text(
@@ -462,4 +462,9 @@ fun FormularioBreveScreenPreview() {
     MaterialTheme {
         FormularioBreveScreen(onGenerar = {}, onCancelar = {})
     }
+}
+
+private fun expiracionAMinutos(texto: String): Int {
+    val cantidad = texto.substringBefore(" ").toInt()
+    return if (texto.contains("minuto")) cantidad else cantidad * 60
 }

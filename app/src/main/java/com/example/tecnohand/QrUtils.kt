@@ -13,17 +13,15 @@ data class DatosInvitacion(
     val numero: String,
     val fecha: String,
     val hora: String,
-    val horasExpiracion: Int
+    val minutosExpiracion: Int
 )
 
 /**
- * Funcion 1: arma el texto (JSON) que ira dentro del QR.
- * Incluye un ID unico y la fecha de vencimiento para que el guardia
- * pueda validar si el codigo sigue vigente.
+ * Funcion 1: arma el texto que ira dentro del QR.
  */
 fun construirContenidoQr(datos: DatosInvitacion): String {
     val ahora = System.currentTimeMillis()
-    val vence = ahora + datos.horasExpiracion * 60L * 60L * 1000L
+    val vence = ahora + datos.minutosExpiracion * 60L * 1000L
 
     return JSONObject().apply {
         put("id", UUID.randomUUID().toString())
