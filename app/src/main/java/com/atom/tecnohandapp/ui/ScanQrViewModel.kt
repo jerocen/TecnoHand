@@ -30,8 +30,7 @@ data class ScanUiState(
     val showServerConfigDialog: Boolean = false,
     val showHistoryDialog: Boolean = false,
     val serverUrl: String = RetrofitClient.baseUrl,
-    val coloniaId: Long = 1,
-    val guardiaCuentaId: Long = 5,
+    val guardJwt: String = "",
     val historyLogs: List<AccessLogItem> = emptyList(),
     val isHistoryLoading: Boolean = false
 )
@@ -44,11 +43,12 @@ class ScanQrViewModel : ViewModel() {
     private var lastProcessTime = 0L
     private var lastProcessedToken: String? = null
 
-    fun updateServerUrl(newUrl: String) {
-        val service = RetrofitClient.getService(newUrl)
+    fun updateServerConfig(newUrl: String, guardJwt: String) {
+        RetrofitClient.getService(newUrl)
         _uiState.update {
             it.copy(
                 serverUrl = RetrofitClient.baseUrl,
+                guardJwt = guardJwt.trim(),
                 showServerConfigDialog = false
             )
         }
@@ -79,6 +79,10 @@ class ScanQrViewModel : ViewModel() {
             _uiState.update { it.copy(errorMessage = "El código QR no puede estar vacío") }
             return
         }
+        if (_uiState.value.guardJwt.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Configura el JWT del guardia en el icono de ajustes") }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -86,13 +90,10 @@ class ScanQrViewModel : ViewModel() {
             try {
                 val service = RetrofitClient.getService(_uiState.value.serverUrl)
                 val request = QrValidationRequest(
-                    token = token.trim(),
-                    coloniaId = _uiState.value.coloniaId,
-                    guardiaCuentaId = _uiState.value.guardiaCuentaId,
-                    tipo = tipo
+                    codigoQr = token.trim()
                 )
 
-                val response = service.validarAcceso(request)
+                val response = service.validarAcceso("Bearer ${_uiState.value.guardJwt}", request)
                 if (response.isSuccessful && response.body() != null) {
                     val result = response.body()!!
                     _uiState.update {
@@ -182,8 +183,12 @@ class ScanQrViewModel : ViewModel() {
             _uiState.update { it.copy(isHistoryLoading = true) }
 
             try {
+                if (_uiState.value.guardJwt.isBlank()) {
+                    _uiState.update { it.copy(isHistoryLoading = false, errorMessage = "Configura el JWT del guardia") }
+                    return@launch
+                }
                 val service = RetrofitClient.getService(_uiState.value.serverUrl)
-                val response = service.obtenerAccesos()
+                val response = service.obtenerAccesos("Bearer ${_uiState.value.guardJwt}")
 
                 if (response.isSuccessful && response.body() != null) {
                     _uiState.update {

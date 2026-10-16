@@ -394,18 +394,15 @@ fun ScanQrScreen(
     if (uiState.showResultSheet && uiState.validationResponse != null) {
         ScanResultDialog(
             response = uiState.validationResponse!!,
-            onDismiss = { viewModel.dismissResultSheet() },
-            onRegistrarSalida = { token ->
-                viewModel.validarAcceso(token, "salida")
-            }
+            onDismiss = { viewModel.dismissResultSheet() }
         )
     }
 
     if (uiState.showManualDialog) {
         ManualInputDialog(
             onDismiss = { viewModel.setShowManualDialog(false) },
-            onValidar = { token, tipo ->
-                viewModel.validarAcceso(token, tipo)
+            onValidar = { token ->
+                viewModel.validarAcceso(token)
             }
         )
     }
@@ -413,9 +410,10 @@ fun ScanQrScreen(
     if (uiState.showServerConfigDialog) {
         ServerConfigDialog(
             currentUrl = uiState.serverUrl,
+            currentGuardJwt = uiState.guardJwt,
             onDismiss = { viewModel.setShowServerConfigDialog(false) },
-            onSave = { newUrl ->
-                viewModel.updateServerUrl(newUrl)
+            onSave = { newUrl, jwt ->
+                viewModel.updateServerConfig(newUrl, jwt)
             }
         )
     }
@@ -432,8 +430,7 @@ fun ScanQrScreen(
 @Composable
 private fun ScanResultDialog(
     response: QrValidationResponse,
-    onDismiss: () -> Unit,
-    onRegistrarSalida: (String) -> Unit
+    onDismiss: () -> Unit
 ) {
     val isPermitido = response.valido || response.resultado == "permitido"
     val headerBgColor = if (isPermitido) SuccessGreenColor else ErrorRedColor
@@ -448,20 +445,6 @@ private fun ScanResultDialog(
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text("Entendido / Escanear Otro", color = Color.White)
-            }
-        },
-        dismissButton = {
-            if (isPermitido && response.detalles != null) {
-                OutlinedButton(
-                    onClick = {
-                        response.detalles.nombre?.let {
-                            onRegistrarSalida(it)
-                        } ?: onDismiss()
-                    },
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Marcar Salida")
-                }
             }
         },
         title = {
@@ -520,6 +503,13 @@ private fun ScanResultDialog(
                         DetailRow(label = "Usos Restantes:", value = "${det.usosRestantes}")
                     }
                 }
+
+                if (!response.visitante.isNullOrBlank()) {
+                    DetailRow(label = "Visitante:", value = response.visitante)
+                }
+                if (response.usosRestantes != null) {
+                    DetailRow(label = "Usos Restantes:", value = "${response.usosRestantes}")
+                }
             }
         },
         shape = RoundedCornerShape(20.dp),
@@ -554,18 +544,9 @@ private fun DetailRow(label: String, value: String) {
 @Composable
 private fun ManualInputDialog(
     onDismiss: () -> Unit,
-    onValidar: (token: String, tipo: String) -> Unit
+    onValidar: (token: String) -> Unit
 ) {
     var tokenText by remember { mutableStateOf("") }
-    var selectedTipo by remember { mutableStateOf("entrada") }
-
-    val sampleTokens = listOf(
-        "QR_PEDRO_001",
-        "QR_MARIA_001",
-        "QR_JORGE_001",
-        "QR_PAULA_001",
-        "QR_RESIDENTE_ANA"
-    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -589,82 +570,20 @@ private fun ManualInputDialog(
                 OutlinedTextField(
                     value = tokenText,
                     onValueChange = { tokenText = it },
-                    label = { Text("Código QR (ej: QR_PEDRO_001)") },
+                    label = { Text("Código QR (THQR1....)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "Códigos de Prueba Rápidos:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SubtitleGrayColor
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(sampleTokens) { token ->
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = ConfirmButtonColor.copy(alpha = 0.12f),
-                            modifier = Modifier.clickable { tokenText = token }
-                        ) {
-                            Text(
-                                text = token,
-                                color = ConfirmButtonColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { selectedTipo = "entrada" }
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (selectedTipo == "entrada") ConfirmButtonColor else Color.LightGray,
-                            modifier = Modifier.size(16.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Entrada", fontSize = 14.sp)
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { selectedTipo = "salida" }
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (selectedTipo == "salida") ConfirmButtonColor else Color.LightGray,
-                            modifier = Modifier.size(16.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Salida", fontSize = 14.sp)
-                    }
-                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     if (tokenText.isNotBlank()) {
-                        onValidar(tokenText.trim(), selectedTipo)
+                        onValidar(tokenText.trim())
                     }
                 },
                 enabled = tokenText.isNotBlank(),
@@ -687,10 +606,12 @@ private fun ManualInputDialog(
 @Composable
 private fun ServerConfigDialog(
     currentUrl: String,
+    currentGuardJwt: String,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (String, String) -> Unit
 ) {
     var urlText by remember { mutableStateOf(currentUrl) }
+    var jwtText by remember { mutableStateOf(currentGuardJwt) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -711,6 +632,17 @@ private fun ServerConfigDialog(
                     onValueChange = { urlText = it },
                     label = { Text("URL Base de la API") },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = jwtText,
+                    onValueChange = { jwtText = it },
+                    label = { Text("JWT del guardia") },
+                    supportingText = { Text("Obténlo con /api/auth/login en Postman") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -744,7 +676,7 @@ private fun ServerConfigDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(urlText) },
+                onClick = { onSave(urlText, jwtText) },
                 colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
             ) {
                 Text("Guardar", color = Color.White)

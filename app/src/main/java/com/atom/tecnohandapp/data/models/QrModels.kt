@@ -32,18 +32,18 @@ data class QrConsultResponse(
 )
 
 data class QrValidationRequest(
-    @SerializedName("token") val token: String,
-    @SerializedName("colonia_id") val coloniaId: Long = 1,
-    @SerializedName("guardia_cuenta_id") val guardiaCuentaId: Long = 5,
-    @SerializedName("tipo") val tipo: String = "entrada" // "entrada" or "salida"
+    @SerializedName("codigo_qr") val codigoQr: String
 )
 
 data class QrValidationResponse(
     @SerializedName("valido") val valido: Boolean,
     @SerializedName("resultado") val resultado: String? = null, // "permitido" or "rechazado"
+    @SerializedName("estado") val estado: String? = null,
     @SerializedName("mensaje") val mensaje: String? = null,
     @SerializedName("motivo") val motivo: String? = null,
     @SerializedName("acceso_id") val accesoId: Long? = null,
+    @SerializedName("visitante") val visitante: String? = null,
+    @SerializedName("usos_restantes") val usosRestantes: Int? = null,
     @SerializedName("detalles") val detalles: QrDetails? = null,
     @SerializedName("error") val error: String? = null
 )

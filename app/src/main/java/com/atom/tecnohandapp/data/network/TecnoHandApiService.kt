@@ -8,6 +8,7 @@ import com.atom.tecnohandapp.data.models.QrValidationResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 
 interface TecnoHandApiService {
@@ -17,11 +18,14 @@ interface TecnoHandApiService {
         @Body request: QrConsultRequest
     ): Response<QrConsultResponse>
 
-    @POST("qr/validar")
+    @POST("qr/escanear")
     suspend fun validarAcceso(
+        @Header("Authorization") authorization: String,
         @Body request: QrValidationRequest
     ): Response<QrValidationResponse>
 
     @GET("qr/accesos")
-    suspend fun obtenerAccesos(): Response<List<AccessLogItem>>
+    suspend fun obtenerAccesos(
+        @Header("Authorization") authorization: String
+    ): Response<List<AccessLogItem>>
 }
