@@ -410,10 +410,9 @@ fun ScanQrScreen(
     if (uiState.showServerConfigDialog) {
         ServerConfigDialog(
             currentUrl = uiState.serverUrl,
-            currentGuardJwt = uiState.guardJwt,
             onDismiss = { viewModel.setShowServerConfigDialog(false) },
-            onSave = { newUrl, jwt ->
-                viewModel.updateServerConfig(newUrl, jwt)
+            onSave = { newUrl ->
+                viewModel.updateServerUrl(newUrl)
             }
         )
     }
@@ -606,12 +605,10 @@ private fun ManualInputDialog(
 @Composable
 private fun ServerConfigDialog(
     currentUrl: String,
-    currentGuardJwt: String,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (String) -> Unit
 ) {
     var urlText by remember { mutableStateOf(currentUrl) }
-    var jwtText by remember { mutableStateOf(currentGuardJwt) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -632,17 +629,6 @@ private fun ServerConfigDialog(
                     onValueChange = { urlText = it },
                     label = { Text("URL Base de la API") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = jwtText,
-                    onValueChange = { jwtText = it },
-                    label = { Text("JWT del guardia") },
-                    supportingText = { Text("Obténlo con /api/auth/login en Postman") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -676,7 +662,7 @@ private fun ServerConfigDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(urlText, jwtText) },
+                onClick = { onSave(urlText) },
                 colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
             ) {
                 Text("Guardar", color = Color.White)

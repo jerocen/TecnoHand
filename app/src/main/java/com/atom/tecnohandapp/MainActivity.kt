@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.atom.tecnohandapp.ui.MainContainerScreen
 import com.atom.tecnohandapp.ui.theme.TecnoHandAppTheme
 
 class MainActivity : ComponentActivity() {
@@ -12,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TecnoHandAppTheme {
-                ScanQrScreen()
+                MainContainerScreen()
             }
         }
     }

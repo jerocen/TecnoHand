@@ -32,7 +32,10 @@ data class QrConsultResponse(
 )
 
 data class QrValidationRequest(
-    @SerializedName("codigo_qr") val codigoQr: String
+    @SerializedName("token") val token: String,
+    @SerializedName("colonia_id") val coloniaId: Long = 1,
+    @SerializedName("guardia_cuenta_id") val guardiaCuentaId: Long = 5,
+    @SerializedName("tipo") val tipo: String = "entrada"
 )
 
 data class QrValidationResponse(

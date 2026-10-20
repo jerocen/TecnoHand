@@ -1,8 +1,5 @@
 package com.atom.tecnohandapp.ui
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.atom.tecnohandapp.data.models.AccessLogItem
@@ -11,8 +8,6 @@ import com.atom.tecnohandapp.data.models.QrConsultResponse
 import com.atom.tecnohandapp.data.models.QrValidationRequest
 import com.atom.tecnohandapp.data.models.QrValidationResponse
 import com.atom.tecnohandapp.data.network.RetrofitClient
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,7 +25,8 @@ data class ScanUiState(
     val showServerConfigDialog: Boolean = false,
     val showHistoryDialog: Boolean = false,
     val serverUrl: String = RetrofitClient.baseUrl,
-    val guardJwt: String = "",
+    val coloniaId: Long = 1,
+    val guardiaCuentaId: Long = 5,
     val historyLogs: List<AccessLogItem> = emptyList(),
     val isHistoryLoading: Boolean = false
 )
@@ -43,12 +39,11 @@ class ScanQrViewModel : ViewModel() {
     private var lastProcessTime = 0L
     private var lastProcessedToken: String? = null
 
-    fun updateServerConfig(newUrl: String, guardJwt: String) {
+    fun updateServerUrl(newUrl: String) {
         RetrofitClient.getService(newUrl)
         _uiState.update {
             it.copy(
                 serverUrl = RetrofitClient.baseUrl,
-                guardJwt = guardJwt.trim(),
                 showServerConfigDialog = false
             )
         }
@@ -56,7 +51,6 @@ class ScanQrViewModel : ViewModel() {
 
     fun onQrDetected(code: String) {
         val now = System.currentTimeMillis()
-        // Prevent processing the exact same code multiple times within 3 seconds or if a result sheet is open
         if (_uiState.value.showResultSheet || _uiState.value.isLoading) return
         if (code == lastProcessedToken && now - lastProcessTime < 3000) return
 
@@ -70,17 +64,12 @@ class ScanQrViewModel : ViewModel() {
             )
         }
 
-        // Validate automatically when scanned
         validarAcceso(code, "entrada")
     }
 
     fun validarAcceso(token: String, tipo: String = "entrada") {
         if (token.isBlank()) {
             _uiState.update { it.copy(errorMessage = "El código QR no puede estar vacío") }
-            return
-        }
-        if (_uiState.value.guardJwt.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Configura el JWT del guardia en el icono de ajustes") }
             return
         }
 
@@ -90,10 +79,13 @@ class ScanQrViewModel : ViewModel() {
             try {
                 val service = RetrofitClient.getService(_uiState.value.serverUrl)
                 val request = QrValidationRequest(
-                    codigoQr = token.trim()
+                    token = token.trim(),
+                    coloniaId = _uiState.value.coloniaId,
+                    guardiaCuentaId = _uiState.value.guardiaCuentaId,
+                    tipo = tipo
                 )
 
-                val response = service.validarAcceso("Bearer ${_uiState.value.guardJwt}", request)
+                val response = service.validarAcceso(request)
                 if (response.isSuccessful && response.body() != null) {
                     val result = response.body()!!
                     _uiState.update {
@@ -183,12 +175,8 @@ class ScanQrViewModel : ViewModel() {
             _uiState.update { it.copy(isHistoryLoading = true) }
 
             try {
-                if (_uiState.value.guardJwt.isBlank()) {
-                    _uiState.update { it.copy(isHistoryLoading = false, errorMessage = "Configura el JWT del guardia") }
-                    return@launch
-                }
                 val service = RetrofitClient.getService(_uiState.value.serverUrl)
-                val response = service.obtenerAccesos("Bearer ${_uiState.value.guardJwt}")
+                val response = service.obtenerAccesos()
 
                 if (response.isSuccessful && response.body() != null) {
                     _uiState.update {
@@ -238,7 +226,6 @@ class ScanQrViewModel : ViewModel() {
                 errorMessage = null
             )
         }
-        // Allow re-scanning after dismissing
         lastProcessedToken = null
     }
 }
