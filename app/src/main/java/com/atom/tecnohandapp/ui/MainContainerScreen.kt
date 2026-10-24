@@ -54,17 +54,19 @@ sealed class NavTab(val index: Int, val title: String, val icon: ImageVector) {
     object ScanQr : NavTab(0, "Acceso QR", Icons.Default.QrCodeScanner)
     object Reports : NavTab(1, "Reportes", Icons.AutoMirrored.Filled.Assignment)
     object Alerts : NavTab(2, "Alertas", Icons.Default.NotificationsActive)
+    object FormReports : NavTab(3, "Form. Reportes", Icons.AutoMirrored.Filled.Assignment)
 }
 
 @Composable
 fun MainContainerScreen(
     scanQrViewModel: ScanQrViewModel = viewModel(),
     reportsViewModel: ReportsViewModel = viewModel(),
-    alertsViewModel: AlertsViewModel = viewModel()
+    alertsViewModel: AlertsViewModel = viewModel(),
+    formReportsViewModel: FormReportsViewModel = viewModel()
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-    val tabs = listOf(NavTab.ScanQr, NavTab.Reports, NavTab.Alerts)
+    val tabs = listOf(NavTab.ScanQr, NavTab.Reports, NavTab.Alerts, NavTab.FormReports)
 
     Column(
         modifier = Modifier
@@ -98,7 +100,8 @@ fun MainContainerScreen(
                     text = when (selectedTabIndex) {
                         0 -> "Módulo de Acceso y QR"
                         1 -> "Administración de Reportes"
-                        else -> "Alertas y Notificaciones"
+                        2 -> "Alertas y Notificaciones"
+                        else -> "Nuevo reporte de incidente"
                     },
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 12.sp
@@ -150,6 +153,7 @@ fun MainContainerScreen(
                     0 -> ScanQrScreen(viewModel = scanQrViewModel)
                     1 -> ReportsAdminScreen(viewModel = reportsViewModel)
                     2 -> AlertsNotificationsScreen(viewModel = alertsViewModel)
+                    3 -> ReportsFormScreen(viewModel = formReportsViewModel)
                 }
             }
         }
