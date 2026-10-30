@@ -40,6 +40,10 @@ retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", ver
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version = "2.7.0" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version = "21.3.0" }
+play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version = "19.0.0" }
+maps-compose = { group = "com.google.maps.android", name = "maps-compose", version = "4.4.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -2,6 +2,7 @@ package com.atom.tecnohandapp.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.History
@@ -28,6 +28,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -42,18 +43,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.atom.tecnohandapp.FullSettingsDialog
+import com.atom.tecnohandapp.HistoryDialog
 import com.atom.tecnohandapp.R
 import com.atom.tecnohandapp.ScanQrScreen
+import com.atom.tecnohandapp.data.local.StringsHelper
+import com.atom.tecnohandapp.data.models.AppTheme
+import com.atom.tecnohandapp.ui.theme.TecnoHandAppTheme
 
-private val NavyHeaderColor = Color(0xFF08142C)
-private val ContainerBgColor = Color(0xFFFFFFFF)
+private val AppBgColor = Color(0xFFF8FAFC)
+private val DarkTextColor = Color(0xFF0A1838)
 private val ReticleBlueColor = Color(0xFF5A82ED)
 private val SubtitleGrayColor = Color(0xFF64748B)
+private val IconBgColor = Color(0xFFF1F5F9)
 
-sealed class NavTab(val index: Int, val title: String, val icon: ImageVector) {
-    object ScanQr : NavTab(0, "Acceso QR", Icons.Default.QrCodeScanner)
-    object Reports : NavTab(1, "Reportes", Icons.AutoMirrored.Filled.Assignment)
-    object Alerts : NavTab(2, "Alertas", Icons.Default.NotificationsActive)
+sealed class NavTab(val index: Int, val icon: ImageVector) {
+    object ScanQr : NavTab(0, Icons.Default.QrCodeScanner)
+    object Reports : NavTab(1, Icons.AutoMirrored.Filled.Assignment)
+    object Alerts : NavTab(2, Icons.Default.NotificationsActive)
 }
 
 @Composable
@@ -62,61 +69,70 @@ fun MainContainerScreen(
     reportsViewModel: ReportsViewModel = viewModel(),
     alertsViewModel: AlertsViewModel = viewModel()
 ) {
+    val scanUiState by scanQrViewModel.uiState.collectAsState()
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-
     val tabs = listOf(NavTab.ScanQr, NavTab.Reports, NavTab.Alerts)
+    val lang = scanUiState.selectedLanguage
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NavyHeaderColor)
-            .statusBarsPadding()
-    ) {
-        // --- Shared Unified Header ---
-        Row(
+    val isDark = when (scanUiState.selectedTheme) {
+        AppTheme.LIGHT -> false
+        AppTheme.DARK -> true
+        AppTheme.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    TecnoHandAppTheme(darkTheme = isDark) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .background(if (isDark) Color(0xFF121826) else AppBgColor)
+                .statusBarsPadding()
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.tecnohand_logo),
-                contentDescription = "Logo TecnoHand",
-                modifier = Modifier.size(46.dp),
-                contentScale = ContentScale.Fit
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "TecnoHand",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+            // --- Minimalist Material Top Bar ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.tecnohand_logo),
+                    contentDescription = "Logo TecnoHand",
+                    modifier = Modifier.size(34.dp),
+                    contentScale = ContentScale.Fit
                 )
-                Text(
-                    text = when (selectedTabIndex) {
-                        0 -> "Módulo de Acceso y QR"
-                        1 -> "Administración de Reportes"
-                        else -> "Alertas y Notificaciones"
-                    },
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp
-                )
-            }
+                Spacer(modifier = Modifier.width(10.dp))
 
-            // Quick Actions in Header
-            if (selectedTabIndex == 0) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "TecnoHand",
+                        color = if (isDark) Color.White else DarkTextColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = when (selectedTabIndex) {
+                            0 -> StringsHelper.headerSubQr(lang)
+                            1 -> StringsHelper.headerSubReports(lang)
+                            else -> StringsHelper.headerSubAlerts(lang)
+                        },
+                        color = if (isDark) Color.LightGray else SubtitleGrayColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Discreet Quick Action Buttons (Historial & Servidor/Ajustes) - Active on ALL TABS!
                 IconButton(
                     onClick = { scanQrViewModel.loadAccessHistory() },
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.12f), CircleShape)
-                        .size(38.dp)
+                        .background(if (isDark) Color(0xFF1E293B) else IconBgColor, CircleShape)
+                        .size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.History,
                         contentDescription = "Historial",
-                        tint = Color.White
+                        tint = if (isDark) Color.White else DarkTextColor,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
@@ -125,66 +141,94 @@ fun MainContainerScreen(
                 IconButton(
                     onClick = { scanQrViewModel.setShowServerConfigDialog(true) },
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.12f), CircleShape)
-                        .size(38.dp)
+                        .background(if (isDark) Color(0xFF1E293B) else IconBgColor, CircleShape)
+                        .size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
-                        contentDescription = "Configurar Servidor",
-                        tint = Color.White
+                        contentDescription = "Ajustes y Configuración",
+                        tint = if (isDark) Color.White else DarkTextColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // --- Screen Body Container ---
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                color = if (isDark) Color(0xFF121826) else AppBgColor
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (selectedTabIndex) {
+                        0 -> ScanQrScreen(viewModel = scanQrViewModel)
+                        1 -> ReportsAdminScreen(viewModel = reportsViewModel, lang = lang)
+                        2 -> AlertsNotificationsScreen(viewModel = alertsViewModel, lang = lang)
+                    }
+                }
+            }
+
+            // --- Minimalist Bottom Navigation Bar ---
+            NavigationBar(
+                containerColor = if (isDark) Color(0xFF1E293B) else Color.White,
+                tonalElevation = 4.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                tabs.forEach { tab ->
+                    val isSelected = selectedTabIndex == tab.index
+                    val tabTitle = when (tab) {
+                        NavTab.ScanQr -> StringsHelper.tabQr(lang)
+                        NavTab.Reports -> StringsHelper.tabReports(lang)
+                        NavTab.Alerts -> StringsHelper.tabAlerts(lang)
+                    }
+
+                    NavigationBarItem(
+                        selected = isSelected,
+                        onClick = { selectedTabIndex = tab.index },
+                        icon = {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tabTitle,
+                                tint = if (isSelected) ReticleBlueColor else SubtitleGrayColor
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = tabTitle,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) ReticleBlueColor else SubtitleGrayColor
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = ReticleBlueColor.copy(alpha = 0.12f)
+                        )
                     )
                 }
             }
         }
 
-        // --- Main White Rounded Card Body Container ---
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            color = ContainerBgColor
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (selectedTabIndex) {
-                    0 -> ScanQrScreen(viewModel = scanQrViewModel)
-                    1 -> ReportsAdminScreen(viewModel = reportsViewModel)
-                    2 -> AlertsNotificationsScreen(viewModel = alertsViewModel)
-                }
-            }
+        // --- Global Settings & History Dialogs (Rendered at Top Level for All Tabs!) ---
+        if (scanUiState.showServerConfigDialog) {
+            FullSettingsDialog(
+                uiState = scanUiState,
+                onDismiss = { scanQrViewModel.setShowServerConfigDialog(false) },
+                onSaveUrl = { newUrl -> scanQrViewModel.updateServerUrl(newUrl) },
+                onSelectTheme = { theme -> scanQrViewModel.setAppTheme(theme) },
+                onSelectLanguage = { l -> scanQrViewModel.setAppLanguage(l) },
+                onToggleOfflineDemo = { enabled -> scanQrViewModel.setOfflineDemoMode(enabled) },
+                onCheckUpdate = { scanQrViewModel.checkVersionUpdates() },
+                onClearUpdateMsg = { scanQrViewModel.clearUpdateCheckResult() }
+            )
         }
 
-        // --- Bottom Navigation Bar ---
-        NavigationBar(
-            containerColor = Color.White,
-            tonalElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            tabs.forEach { tab ->
-                val isSelected = selectedTabIndex == tab.index
-                NavigationBarItem(
-                    selected = isSelected,
-                    onClick = { selectedTabIndex = tab.index },
-                    icon = {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.title,
-                            tint = if (isSelected) ReticleBlueColor else SubtitleGrayColor
-                        )
-                    },
-                    label = {
-                        Text(
-                            text = tab.title,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) ReticleBlueColor else SubtitleGrayColor
-                        )
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        indicatorColor = ReticleBlueColor.copy(alpha = 0.12f)
-                    )
-                )
-            }
+        if (scanUiState.showHistoryDialog) {
+            HistoryDialog(
+                logs = scanUiState.historyLogs,
+                isLoading = scanUiState.isHistoryLoading,
+                onDismiss = { scanQrViewModel.setShowHistoryDialog(false) }
+            )
         }
     }
 }

@@ -29,16 +29,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -58,10 +54,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.atom.tecnohandapp.data.local.StringsHelper
+import com.atom.tecnohandapp.data.models.AppLanguage
 import com.atom.tecnohandapp.data.models.ReportItem
 
 private val ConfirmButtonColor = Color(0xFF5A82ED)
-private val DarkTextColor = Color(0xFF0A1838)
 private val SubtitleGrayColor = Color(0xFF64748B)
 
 private val IniciadoColor = Color(0xFFF59E0B)  // Naranja / Ámbar
@@ -71,10 +68,26 @@ private val TerminadoColor = Color(0xFF10B981) // Verde
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsAdminScreen(
-    viewModel: ReportsViewModel = viewModel()
+    viewModel: ReportsViewModel = viewModel(),
+    lang: AppLanguage = AppLanguage.SPANISH
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val tabs = listOf("Todos", "Iniciado", "En Proceso", "Terminado")
+    val tabs = listOf(
+        StringsHelper.tabAll(lang),
+        StringsHelper.tabInitiated(lang),
+        StringsHelper.tabInProgress(lang),
+        StringsHelper.tabCompleted(lang)
+    )
+    var showFormScreen by remember { mutableStateOf(false) }
+
+    if (showFormScreen) {
+        ReportsFormScreen(
+            reportsViewModel = viewModel,
+            lang = lang,
+            onBack = { showFormScreen = false }
+        )
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -90,13 +103,13 @@ fun ReportsAdminScreen(
             ) {
                 Column {
                     Text(
-                        text = "Panel de Reportes",
+                        text = StringsHelper.reportsAdminTitle(lang),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = DarkTextColor
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Administración de estado e incidentes",
+                        text = StringsHelper.reportsAdminSub(lang),
                         fontSize = 13.sp,
                         color = SubtitleGrayColor
                     )
@@ -116,9 +129,9 @@ fun ReportsAdminScreen(
             // State Filter Tabs
             PrimaryTabRow(
                 selectedTabIndex = tabs.indexOf(uiState.selectedTab).coerceAtLeast(0),
-                containerColor = Color(0xFFF1F5F9),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 contentColor = ConfirmButtonColor,
-                modifier = Modifier.background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
             ) {
                 tabs.forEach { tabName ->
                     val isSelected = uiState.selectedTab == tabName
@@ -157,7 +170,7 @@ fun ReportsAdminScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No se encontraron reportes en el estado '${uiState.selectedTab}'",
+                        text = StringsHelper.noReportsMsg(lang, uiState.selectedTab),
                         color = SubtitleGrayColor,
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center
@@ -173,6 +186,7 @@ fun ReportsAdminScreen(
                     items(uiState.reports) { report ->
                         ReportCardItem(
                             report = report,
+                            lang = lang,
                             onStatusChangeClick = { viewModel.setSelectedReportDetail(report) }
                         )
                     }
@@ -180,9 +194,9 @@ fun ReportsAdminScreen(
             }
         }
 
-        // Floating Action Button to Create Report
+        // Floating Action Button to Open Full Form
         FloatingActionButton(
-            onClick = { viewModel.setShowCreateDialog(true) },
+            onClick = { showFormScreen = true },
             containerColor = ConfirmButtonColor,
             contentColor = Color.White,
             modifier = Modifier
@@ -190,23 +204,14 @@ fun ReportsAdminScreen(
                 .padding(16.dp),
             shape = CircleShape
         ) {
-            Icon(imageVector = Icons.Default.Add, contentDescription = "Nuevo Reporte")
+            Icon(imageVector = Icons.Default.Add, contentDescription = StringsHelper.generateReportTitle(lang))
         }
-    }
-
-    // Dialogs
-    if (uiState.showCreateDialog) {
-        CreateReportDialog(
-            onDismiss = { viewModel.setShowCreateDialog(false) },
-            onCreate = { cat, desc, prio ->
-                viewModel.createReport(cat, desc, prio)
-            }
-        )
     }
 
     if (uiState.selectedReportForDetail != null) {
         UpdateStatusDialog(
             report = uiState.selectedReportForDetail!!,
+            lang = lang,
             onDismiss = { viewModel.setSelectedReportDetail(null) },
             onUpdateStatus = { reportId, newStatus ->
                 viewModel.updateReportStatus(reportId, newStatus)
@@ -218,6 +223,7 @@ fun ReportsAdminScreen(
 @Composable
 private fun ReportCardItem(
     report: ReportItem,
+    lang: AppLanguage,
     onStatusChangeClick: () -> Unit
 ) {
     val (statusColor, statusIcon) = when (report.estadoUi) {
@@ -232,7 +238,7 @@ private fun ReportCardItem(
             .fillMaxWidth()
             .clickable { onStatusChangeClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -281,7 +287,7 @@ private fun ReportCardItem(
             Text(
                 text = report.descripcion,
                 fontSize = 14.sp,
-                color = DarkTextColor,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium
             )
 
@@ -296,14 +302,14 @@ private fun ReportCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Reportó: ${report.reportadoPorNombre} • ${report.creadoEn.take(16)}",
+                    text = "${StringsHelper.reportedBy(lang)} ${report.reportadoPorNombre} • ${report.creadoEn.take(16)}",
                     fontSize = 11.sp,
                     color = SubtitleGrayColor
                 )
 
                 TextButton(onClick = onStatusChangeClick) {
                     Text(
-                        text = "Cambiar Estado >",
+                        text = StringsHelper.changeStatus(lang),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = ConfirmButtonColor
@@ -317,6 +323,7 @@ private fun ReportCardItem(
 @Composable
 private fun UpdateStatusDialog(
     report: ReportItem,
+    lang: AppLanguage,
     onDismiss: () -> Unit,
     onUpdateStatus: (id: Long, status: String) -> Unit
 ) {
@@ -324,10 +331,10 @@ private fun UpdateStatusDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Administrar Reporte #${report.id}",
+                text = StringsHelper.manageReport(lang, report.id),
                 fontWeight = FontWeight.Bold,
                 fontSize = 17.sp,
-                color = DarkTextColor
+                color = MaterialTheme.colorScheme.onSurface
             )
         },
         text = {
@@ -335,12 +342,12 @@ private fun UpdateStatusDialog(
                 Text(
                     text = report.descripcion,
                     fontSize = 14.sp,
-                    color = DarkTextColor,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Estado actual: ${report.estadoUi}",
+                    text = StringsHelper.currentStatus(lang, report.estadoUi),
                     fontSize = 13.sp,
                     color = SubtitleGrayColor,
                     fontWeight = FontWeight.Bold
@@ -348,21 +355,20 @@ private fun UpdateStatusDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Seleccione el nuevo estado:",
+                    text = StringsHelper.selectNewStatus(lang),
                     fontSize = 13.sp,
-                    color = DarkTextColor,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Action buttons for changing status
                 Button(
                     onClick = { onUpdateStatus(report.id, "Iniciado") },
                     colors = ButtonDefaults.buttonColors(containerColor = IniciadoColor),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Marcar como INICIADO", color = Color.White)
+                    Text(StringsHelper.tabInitiated(lang).uppercase(), color = Color.White)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -373,7 +379,7 @@ private fun UpdateStatusDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Marcar como EN PROCESO", color = Color.White)
+                    Text(StringsHelper.tabInProgress(lang).uppercase(), color = Color.White)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -384,139 +390,17 @@ private fun UpdateStatusDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Marcar como TERMINADO", color = Color.White)
+                    Text(StringsHelper.tabCompleted(lang).uppercase(), color = Color.White)
                 }
             }
         },
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(StringsHelper.closeBtn(lang))
             }
         },
         shape = RoundedCornerShape(20.dp),
-        containerColor = Color.White
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CreateReportDialog(
-    onDismiss: () -> Unit,
-    onCreate: (categoria: String, descripcion: String, prioridad: String) -> Unit
-) {
-    var categoria by remember { mutableStateOf("seguridad") }
-    var descripcion by remember { mutableStateOf("") }
-    var prioridad by remember { mutableStateOf("media") }
-
-    var catExpanded by remember { mutableStateOf(false) }
-    var prioExpanded by remember { mutableStateOf(false) }
-
-    val categoriasList = listOf("seguridad", "bienestar", "infraestructura")
-    val prioridadesList = listOf("baja", "media", "alta", "urgente")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("Crear Nuevo Reporte", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // Category Dropdown
-                ExposedDropdownMenuBox(
-                    expanded = catExpanded,
-                    onExpandedChange = { catExpanded = !catExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = categoria.uppercase(),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Categoría") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = catExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    ExposedDropdownMenu(
-                        expanded = catExpanded,
-                        onDismissRequest = { catExpanded = false }
-                    ) {
-                        categoriasList.forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.uppercase()) },
-                                onClick = {
-                                    categoria = item
-                                    catExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Priority Dropdown
-                ExposedDropdownMenuBox(
-                    expanded = prioExpanded,
-                    onExpandedChange = { prioExpanded = !prioExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = prioridad.uppercase(),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Prioridad") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = prioExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    ExposedDropdownMenu(
-                        expanded = prioExpanded,
-                        onDismissRequest = { prioExpanded = false }
-                    ) {
-                        prioridadesList.forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.uppercase()) },
-                                onClick = {
-                                    prioridad = item
-                                    prioExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Description Input
-                OutlinedTextField(
-                    value = descripcion,
-                    onValueChange = { descripcion = it },
-                    label = { Text("Descripción del incidente") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onCreate(categoria, descripcion, prioridad) },
-                enabled = descripcion.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-            ) {
-                Text("Guardar y Registrar", color = Color.White)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        },
-        shape = RoundedCornerShape(20.dp),
-        containerColor = Color.White
+        containerColor = MaterialTheme.colorScheme.surface
     )
 }

@@ -1,7 +1,6 @@
 package com.atom.tecnohandapp.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -34,10 +32,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,9 +47,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.atom.tecnohandapp.data.local.StringsHelper
 import com.atom.tecnohandapp.data.models.AlertItem
+import com.atom.tecnohandapp.data.models.AppLanguage
 
-private val DarkTextColor = Color(0xFF0A1838)
 private val SubtitleGrayColor = Color(0xFF64748B)
 
 private val AlertRed = Color(0xFFEF4444)
@@ -60,10 +59,16 @@ private val AlertGreen = Color(0xFF10B981)
 
 @Composable
 fun AlertsNotificationsScreen(
-    viewModel: AlertsViewModel = viewModel()
+    viewModel: AlertsViewModel = viewModel(),
+    lang: AppLanguage = AppLanguage.SPANISH
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val filterOptions = listOf("Todas", "Críticas", "En Proceso", "Terminadas")
+    val filterOptions = listOf(
+        StringsHelper.tabAll(lang),
+        StringsHelper.tabCritical(lang),
+        StringsHelper.tabInProgress(lang),
+        StringsHelper.tabCompleted(lang)
+    )
 
     Column(
         modifier = Modifier
@@ -78,13 +83,13 @@ fun AlertsNotificationsScreen(
         ) {
             Column {
                 Text(
-                    text = "Alertas y Notificaciones",
+                    text = StringsHelper.alertsTitle(lang),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = DarkTextColor
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Avisos clasificados según el estado y nivel de riesgo",
+                    text = StringsHelper.alertsSub(lang),
                     fontSize = 12.sp,
                     color = SubtitleGrayColor
                 )
@@ -128,13 +133,13 @@ fun AlertsNotificationsScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Botón de Emergencia / Pánico",
+                            text = StringsHelper.panicCardTitle(lang),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = AlertRed
                         )
                         Text(
-                            text = "Enviar señal inmediata de alerta a la caseta",
+                            text = StringsHelper.panicCardSub(lang),
                             fontSize = 11.sp,
                             color = SubtitleGrayColor
                         )
@@ -146,7 +151,7 @@ fun AlertsNotificationsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = AlertRed),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("PÁNICO", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                    Text(StringsHelper.panicBtnText(lang), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
                 }
             }
         }
@@ -160,10 +165,10 @@ fun AlertsNotificationsScreen(
         ) {
             items(filterOptions) { filter ->
                 val isSelected = uiState.selectedFilter == filter
-                val chipColor = when (filter) {
-                    "Críticas" -> AlertRed
-                    "En Proceso" -> AlertYellow
-                    "Terminadas" -> AlertGreen
+                val chipColor = when {
+                    filter == StringsHelper.tabCritical(lang) || filter == "Críticas" -> AlertRed
+                    filter == StringsHelper.tabInProgress(lang) || filter == "En Proceso" -> AlertYellow
+                    filter == StringsHelper.tabCompleted(lang) || filter == "Terminadas" -> AlertGreen
                     else -> Color(0xFF5A82ED)
                 }
 
@@ -203,7 +208,7 @@ fun AlertsNotificationsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No hay notificaciones ni alertas para el filtro '${uiState.selectedFilter}'",
+                    text = StringsHelper.noAlertsMsg(lang, uiState.selectedFilter),
                     color = SubtitleGrayColor,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
@@ -219,6 +224,7 @@ fun AlertsNotificationsScreen(
                 items(uiState.filteredAlerts) { alert ->
                     AlertNotificationCard(
                         alert = alert,
+                        lang = lang,
                         onResolve = { viewModel.markAlertAsResolved(alert.id) }
                     )
                 }
@@ -233,7 +239,7 @@ fun AlertsNotificationsScreen(
             onDismissRequest = { viewModel.clearMessages() },
             title = {
                 Text(
-                    text = if (isError) "Aviso de Error" else "Notificación de Alerta",
+                    text = if (isError) "Error Notification" else "Panic Alert Sent",
                     fontWeight = FontWeight.Bold,
                     color = if (isError) AlertRed else AlertGreen
                 )
@@ -241,7 +247,8 @@ fun AlertsNotificationsScreen(
             text = {
                 Text(
                     text = uiState.errorMessage ?: uiState.successMessage ?: "Operación realizada",
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             confirmButton = {
@@ -249,11 +256,11 @@ fun AlertsNotificationsScreen(
                     onClick = { viewModel.clearMessages() },
                     colors = ButtonDefaults.buttonColors(containerColor = if (isError) AlertRed else AlertGreen)
                 ) {
-                    Text("Entendido", color = Color.White)
+                    Text(StringsHelper.understandBtn(lang), color = Color.White)
                 }
             },
             shape = RoundedCornerShape(20.dp),
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }
@@ -261,6 +268,7 @@ fun AlertsNotificationsScreen(
 @Composable
 private fun AlertNotificationCard(
     alert: AlertItem,
+    lang: AppLanguage,
     onResolve: () -> Unit
 ) {
     val (statusColor, icon) = when (alert.colorNivel) {
@@ -272,7 +280,7 @@ private fun AlertNotificationCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -317,7 +325,7 @@ private fun AlertNotificationCard(
                 text = alert.titulo,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = DarkTextColor
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -338,9 +346,9 @@ private fun AlertNotificationCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Reportó: ${alert.reportadoPor} | ${alert.fecha.take(16)}",
+                    text = "${StringsHelper.reportedBy(lang)} ${alert.reportadoPor} | ${alert.fecha.take(16)}",
                     fontSize = 10.sp,
-                    color = Color.Gray
+                    color = SubtitleGrayColor
                 )
 
                 if (alert.estadoUi != "Terminado") {
@@ -349,7 +357,7 @@ private fun AlertNotificationCard(
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(1.dp, AlertGreen)
                     ) {
-                        Text("Resolver", fontSize = 11.sp, color = AlertGreen, fontWeight = FontWeight.Bold)
+                        Text(StringsHelper.resolveBtn(lang), fontSize = 11.sp, color = AlertGreen, fontWeight = FontWeight.Bold)
                     }
                 }
             }

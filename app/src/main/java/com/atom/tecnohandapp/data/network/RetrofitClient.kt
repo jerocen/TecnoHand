@@ -13,6 +13,7 @@ object RetrofitClient {
         private set
 
     private var apiService: TecnoHandApiService? = null
+    private var githubApiService: GithubApiService? = null
 
     fun getService(customUrl: String? = null): TecnoHandApiService {
         val newUrl = formatUrl(customUrl ?: baseUrl)
@@ -40,6 +41,24 @@ object RetrofitClient {
         }
 
         return apiService!!
+    }
+
+    fun getGithubService(): GithubApiService {
+        if (githubApiService == null) {
+            val okHttpClient = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+
+            val retrofit = Retrofit.Builder()
+                .baseUrl("https://api.github.com/")
+                .client(okHttpClient)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+
+            githubApiService = retrofit.create(GithubApiService::class.java)
+        }
+        return githubApiService!!
     }
 
     private fun formatUrl(url: String): String {
