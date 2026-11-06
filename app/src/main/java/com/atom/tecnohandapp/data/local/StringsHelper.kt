@@ -62,6 +62,7 @@ object StringsHelper {
     fun tapToAttachPhoto(language: AppLanguage): String = if (isEnglish(language)) "Tap to attach high-res photo (Up to 30MB / 3000x3000px)" else "Toca para adjuntar fotos en alta resolución (Hasta 30MB / 3000x3000px)"
     fun locationLabel(language: AppLanguage): String = if (isEnglish(language)) "Incident Location" else "Ubicación del incidente"
     fun useMyGps(language: AppLanguage): String = if (isEnglish(language)) "Use my GPS 📍" else "Usar mi GPS 📍"
+    fun simulatedPointsLabel(language: AppLanguage): String = if (isEnglish(language)) "📍 Simulate Neighborhood Points:" else "📍 Simular Puntos de la Colonia:"
     fun submitReportBtn(language: AppLanguage): String = if (isEnglish(language)) "Submit Report" else "Enviar Reporte"
 
     // --- Alerts Screen ---

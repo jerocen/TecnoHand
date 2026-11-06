@@ -1,10 +1,12 @@
 package com.atom.tecnohandapp.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,22 +66,39 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import com.atom.tecnohandapp.data.local.StringsHelper
 import com.atom.tecnohandapp.data.models.AppLanguage
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
-import com.google.maps.android.compose.rememberCameraPositionState
+import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Marker
 
 private val ConfirmButtonColor = Color(0xFF5A82ED)
 private val SubtitleGrayColor = Color(0xFF64748B)
 private val BorderGrayColor = Color(0xFFCBD5E1)
+
+data class NeighborhoodPreset(
+    val nombreEs: String,
+    val nombreEn: String,
+    val direccion: String,
+    val lat: Double,
+    val lng: Double
+)
+
+private val neighborhoodPresets = listOf(
+    NeighborhoodPreset("Caseta Principal", "Main Gate", "Caseta de Vigilancia, Av. Los Pinos 100", 19.432608, -99.133209),
+    NeighborhoodPreset("Parque Central", "Central Park", "Área Verde y Jardines, Calle Roble 205", 19.434100, -99.131500),
+    NeighborhoodPreset("Canchas Deportivas", "Sports Courts", "Canchas de Tenis, Pasaje Encino 42", 19.431200, -99.134800),
+    NeighborhoodPreset("Zona Residencial Este", "East Area", "Paseo de los Fresnos 88", 19.435500, -99.129800),
+    NeighborhoodPreset("Juegos Infantiles", "Playground Area", "Plaza Central, Calle Sauces 12", 19.430100, -99.136000)
+)
 
 @Composable
 fun ReportsFormScreen(
@@ -221,6 +242,13 @@ fun ReportsFormScreen(
                 ) {
                     prioritiesList.forEach { prio ->
                         val isSelected = uiState.prioridad == prio
+                        val prioText = when (prio) {
+                            "baja" -> if (StringsHelper.isEnglish(lang)) "LOW" else "BAJA"
+                            "media" -> if (StringsHelper.isEnglish(lang)) "MEDIUM" else "MEDIA"
+                            "alta" -> if (StringsHelper.isEnglish(lang)) "HIGH" else "ALTA"
+                            else -> if (StringsHelper.isEnglish(lang)) "URGENT" else "URGENTE"
+                        }
+
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = if (isSelected) ConfirmButtonColor else MaterialTheme.colorScheme.surfaceVariant,
@@ -229,7 +257,7 @@ fun ReportsFormScreen(
                                 .clickable { formViewModel.setPrioridad(prio) }
                         ) {
                             Text(
-                                text = prio.uppercase(),
+                                text = prioText,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isSelected) Color.White else SubtitleGrayColor,
@@ -347,7 +375,7 @@ fun ReportsFormScreen(
                 }
             }
 
-            // Ubicación del incidente con GPS y Google Maps
+            // Ubicación del incidente con GPS, Presets Simulados y Mapa OpenStreetMap
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -393,7 +421,7 @@ fun ReportsFormScreen(
                     onValueChange = { formViewModel.setDireccion(it) },
                     placeholder = {
                         Text(
-                            text = "Calle, número exterior o referencia de la zona",
+                            text = if (StringsHelper.isEnglish(lang)) "Street, exterior number or area reference" else "Calle, número exterior o referencia de la zona",
                             fontSize = 13.sp,
                             color = SubtitleGrayColor
                         )
@@ -417,18 +445,59 @@ fun ReportsFormScreen(
                     )
                 )
 
+                // Simulated Neighborhood Location Presets
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = StringsHelper.simulatedPointsLabel(lang),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(neighborhoodPresets) { preset ->
+                            val isSelected = uiState.latitude == preset.lat && uiState.longitude == preset.lng
+                            val name = if (StringsHelper.isEnglish(lang)) preset.nombreEn else preset.nombreEs
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) ConfirmButtonColor else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, if (isSelected) ConfirmButtonColor else BorderGrayColor),
+                                modifier = Modifier.clickable {
+                                    formViewModel.setLocationCoordinates(
+                                        lat = preset.lat,
+                                        lng = preset.lng,
+                                        address = preset.direccion
+                                    )
+                                }
+                            ) {
+                                Text(
+                                    text = name,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White else SubtitleGrayColor,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Interactive Google Map View Container
-                SafeGoogleMapContainer(
+                // Real OpenStreetMap Cartography Map Container (100% Free & Immediate streets!)
+                OsmMapViewContainer(
                     latitude = uiState.latitude,
                     longitude = uiState.longitude,
                     direccion = uiState.direccion,
-                    onMapClick = { latLng ->
+                    onMapClick = { lat, lng ->
                         formViewModel.setLocationCoordinates(
-                            latLng.latitude,
-                            latLng.longitude,
-                            "Lat: %.4f, Lng: %.4f".format(latLng.latitude, latLng.longitude)
+                            lat,
+                            lng,
+                            "Lat: %.4f, Lng: %.4f".format(lat, lng)
                         )
                     }
                 )
@@ -480,43 +549,63 @@ fun ReportsFormScreen(
 }
 
 @Composable
-private fun SafeGoogleMapContainer(
+private fun OsmMapViewContainer(
     latitude: Double,
     longitude: Double,
     direccion: String,
-    onMapClick: (LatLng) -> Unit
+    onMapClick: (Double, Double) -> Unit
 ) {
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), 15f)
-    }
+    val context = LocalContext.current
 
-    LaunchedEffect(latitude, longitude) {
-        try {
-            cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), 16f)
-            )
-        } catch (e: Throwable) {
-            // Ignore camera animation error
-        }
+    LaunchedEffect(Unit) {
+        Configuration.getInstance().userAgentValue = context.packageName
+        Configuration.getInstance().load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(170.dp)
+            .height(180.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, BorderGrayColor, RoundedCornerShape(12.dp))
     ) {
-        GoogleMap(
-            modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraPositionState,
-            onMapClick = onMapClick
-        ) {
-            Marker(
-                state = MarkerState(position = LatLng(latitude, longitude)),
-                title = "Ubicación del Incidente",
-                snippet = direccion
-            )
-        }
+        AndroidView(
+            factory = { ctx ->
+                MapView(ctx).apply {
+                    setTileSource(TileSourceFactory.MAPNIK)
+                    setMultiTouchControls(true)
+                    controller.setZoom(16.5)
+                    controller.setCenter(GeoPoint(latitude, longitude))
+
+                    val marker = Marker(this).apply {
+                        position = GeoPoint(latitude, longitude)
+                        title = "Ubicación del Incidente"
+                        snippet = direccion
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    }
+                    overlays.add(marker)
+
+                    val mapEventsReceiver = object : MapEventsReceiver {
+                        override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                            if (p != null) {
+                                onMapClick(p.latitude, p.longitude)
+                            }
+                            return true
+                        }
+                        override fun longPressHelper(p: GeoPoint?): Boolean = false
+                    }
+                    overlays.add(MapEventsOverlay(mapEventsReceiver))
+                }
+            },
+            update = { mapView ->
+                mapView.controller.setCenter(GeoPoint(latitude, longitude))
+                mapView.overlays.filterIsInstance<Marker>().firstOrNull()?.apply {
+                    position = GeoPoint(latitude, longitude)
+                    snippet = direccion
+                }
+                mapView.invalidate()
+            },
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
