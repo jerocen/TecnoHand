@@ -34,8 +34,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +51,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.atom.tecnohandapp.data.local.StringsHelper
 import com.atom.tecnohandapp.data.models.AppLanguage
+import kotlinx.coroutines.delay
+import java.time.Duration
+import java.time.LocalDateTime
 
 private val PrimaryDarkBlue = Color(0xFF060060)
 private val ProgressBlue = Color(0xFF5C5BD6)
@@ -61,7 +64,7 @@ private val SubtitleTextBlue = Color(0xFF6E78A0)
 data class VotingItem(
     val id: String,
     val titulo: String,
-    val diasRestantes: Int,
+    val fechaCierre: LocalDateTime,
     val porcentaje: Float,
     val presupuestoAsignado: String
 )
@@ -75,10 +78,21 @@ fun VotingScreen(
     var selectedItemForVote by remember { mutableStateOf<VotingItem?>(null) }
     var voteSuccessMessage by remember { mutableStateOf<String?>(null) }
 
+    var votedItemId by remember { mutableStateOf<String?>(null) }
+    val hasVoted = votedItemId != null
+
+    var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000L)
+            currentTime = LocalDateTime.now()
+        }
+    }
+
     val votingList = listOf(
-        VotingItem("VOT-1", "Presupuesto Participativo", 2, 0.62f, "$552,000"),
-        VotingItem("VOT-2", "Parque Comunitario", 5, 0.35f, "$408,000"),
-        VotingItem("VOT-3", "Servicios Públicos", 7, 0.18f, "$240,000")
+        VotingItem("VOT-1", "Barda Perimetral", LocalDateTime.now().plusSeconds(15), 0.62f, "$552,000"),
+        VotingItem("VOT-2", "Parque Comunitario", LocalDateTime.now().plusDays(2).plusHours(5), 0.35f, "$408,000"),
+        VotingItem("VOT-3", "Servicios Públicos", LocalDateTime.now().minusDays(1), 0.18f, "$240,000")
     )
 
     Column(
@@ -154,7 +168,15 @@ fun VotingScreen(
                             }
                         }
 
-                        if (activeSubTab == "Activas") {
+                        val filteredList = if (activeSubTab == "Activas") {
+                            votingList.filter { currentTime.isBefore(it.fechaCierre) }
+                        } else {
+                            votingList.filter { currentTime.isAfter(it.fechaCierre) }
+                        }
+
+                        //activeSubTab == "Activas"
+                        if(filteredList.isNotEmpty())
+                        {
                             LazyColumn(
                                 verticalArrangement = Arrangement.spacedBy(14.dp),
                                 modifier = Modifier.fillMaxSize()
@@ -163,6 +185,9 @@ fun VotingScreen(
                                     VotingCardItem(
                                         item = item,
                                         lang = lang,
+                                        currentTime = currentTime,
+                                        hasVoted = hasVoted,
+                                        isMyVote = votedItemId == item.id,
                                         onVoteClick = { selectedItemForVote = item }
                                     )
                                 }
@@ -429,7 +454,10 @@ fun VotingScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { selectedItemForVote = null },
+                        onClick = {
+                            votedItemId = item.id
+                            voteSuccessMessage = "¡Voto registrado para '${item.titulo}'!"
+                            selectedItemForVote = null },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(20.dp),
                         border = BorderStroke(1.2.dp, PrimaryDarkBlue)
@@ -475,8 +503,30 @@ fun VotingScreen(
 private fun VotingCardItem(
     item: VotingItem,
     lang: AppLanguage,
+    currentTime: LocalDateTime,
+    hasVoted: Boolean,
+    isMyVote: Boolean,
     onVoteClick: () -> Unit
 ) {
+    val isClosed = currentTime.isAfter(item.fechaCierre)
+    val duration = Duration.between(currentTime, item.fechaCierre)
+
+    val timeRemainingText = if (isClosed) {
+        if (StringsHelper.isEnglish(lang)) "Poll Closed" else "Votación Cerrada"
+    } else {
+        val days = duration.toDays()
+        val hours = duration.toHours() % 24
+        val minutes = duration.toMinutes() % 60
+        val seconds = duration.seconds % 60
+
+        if (days > 0) {
+            if (StringsHelper.isEnglish(lang)) "Closes in $days d $hours h" else "Cierra en $days d $hours h"
+        } else {
+            // Cuenta regresiva estilo cronómetro
+            if (StringsHelper.isEnglish(lang)) "Closes in ${hours}h ${minutes}m ${seconds}s"
+            else "Cierra en ${hours}h ${minutes}m ${seconds}s"
+        }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -490,9 +540,10 @@ private fun VotingCardItem(
                 color = PrimaryDarkBlue
             )
             Text(
-                text = if (StringsHelper.isEnglish(lang)) "Closes in ${item.diasRestantes} days" else "Cierra en ${item.diasRestantes} días",
+                text = timeRemainingText,
                 fontSize = 12.sp,
-                color = SubtitleTextBlue
+                color = if (isClosed || (duration.toHours() == 0L && duration.toMinutes() < 5)) Color.Red else SubtitleTextBlue,
+                fontWeight = if (isClosed) FontWeight.Bold else FontWeight.Normal
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -524,11 +575,22 @@ private fun VotingCardItem(
 
                 Button(
                     onClick = onVoteClick,
+                    enabled = !hasVoted,
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkBlue)
+                    //colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkBlue)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryDarkBlue,
+                        disabledContainerColor = if (isMyVote) ProgressBlue else Color.Gray.copy(alpha = 0.5f),
+                        disabledContentColor = if (isMyVote) Color.White else Color.DarkGray
+                    )
                 ) {
                     Text(
-                        text = if (StringsHelper.isEnglish(lang)) "VOTE" else "VOTAR",
+                        //text = if (StringsHelper.isEnglish(lang)) "VOTE" else "VOTAR",
+                        text = when {
+                            isMyVote -> if (StringsHelper.isEnglish(lang)) "VOTED" else "VOTADO"
+                            hasVoted -> if (StringsHelper.isEnglish(lang)) "LOCKED" else "BLOQUEADO"
+                            else -> if (StringsHelper.isEnglish(lang)) "VOTE" else "VOTAR"
+                        },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
