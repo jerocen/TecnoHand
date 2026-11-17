@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,12 +20,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +60,7 @@ import com.atom.tecnohandapp.data.models.UserProfile
 private val ConfirmButtonColor = Color(0xFF5A82ED)
 private val SubtitleGrayColor = Color(0xFF64748B)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FamilyProfileScreen(
     userProfile: UserProfile,
@@ -62,11 +68,21 @@ fun FamilyProfileScreen(
     onUpdateProfile: (UserProfile) -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
-    var viviendaText by remember { mutableStateOf(userProfile.vivienda) }
+    var viviendaText by remember { mutableStateOf(userProfile.vivienda.ifBlank { userProfile.ubicacionDireccion }) }
+    var numeroViviendaText by remember { mutableStateOf(userProfile.numeroVivienda) }
     var telefonoText by remember { mutableStateOf(userProfile.telefono) }
-    var nuevoMiembroText by remember { mutableStateOf("") }
+    var cantidadResidentes by remember { mutableIntStateOf(userProfile.cantidadResidentes) }
+
+    var nuevoNombreFamiliar by remember { mutableStateOf("") }
+    var nuevoParentesco by remember { mutableStateOf("Hijo/a") }
+    var parentescoDropdownExpanded by remember { mutableStateOf(false) }
+
     val integrantesList = remember { mutableStateListOf(*userProfile.integrantesFamilia.toTypedArray()) }
     var saveSuccessMessage by remember { mutableStateOf(false) }
+
+    val parentescoOptions = listOf(
+        "Esposo/a", "Hijo/a", "Padre/Madre", "Hermano/a", "Abuelo/a", "Tío/a", "Otro"
+    )
 
     Column(
         modifier = Modifier
@@ -88,12 +104,17 @@ fun FamilyProfileScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(60.dp)
                         .clip(CircleShape)
                         .background(ConfirmButtonColor),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(14.dp))
@@ -106,22 +127,44 @@ fun FamilyProfileScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "ID: ${userProfile.id} • ${userProfile.colonia}",
+                        text = "Email: ${userProfile.email}",
                         fontSize = 12.sp,
                         color = SubtitleGrayColor
                     )
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = ConfirmButtonColor.copy(alpha = 0.15f),
-                        modifier = Modifier.padding(top = 4.dp)
+                    Text(
+                        text = "Nacimiento: ${userProfile.fechaNacimiento}",
+                        fontSize = 11.sp,
+                        color = SubtitleGrayColor
+                    )
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "ROL: ${userProfile.rol.name}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ConfirmButtonColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ConfirmButtonColor.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "ROL: ${userProfile.rol.name}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ConfirmButtonColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF10B981).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "ID VIVIENDA: ${userProfile.numeroVivienda}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF059669),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -138,21 +181,40 @@ fun FamilyProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = if (StringsHelper.isEnglish(lang)) "Housing & Contact Details" else "Datos de la Vivienda y Contacto",
+                    text = if (StringsHelper.isEnglish(lang)) "Housing & Location Details" else "Datos de la Vivienda y Ubicación",
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
                 OutlinedTextField(
-                    value = viviendaText,
-                    onValueChange = { viviendaText = it },
-                    label = { Text(if (StringsHelper.isEnglish(lang)) "Residence Address" else "Dirección de la Vivienda") },
+                    value = numeroViviendaText,
+                    onValueChange = { numeroViviendaText = it },
+                    label = { Text("Número o ID de Vivienda (DB)") },
                     leadingIcon = { Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = ConfirmButtonColor) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                OutlinedTextField(
+                    value = viviendaText,
+                    onValueChange = { viviendaText = it },
+                    label = { Text(if (StringsHelper.isEnglish(lang)) "Residence Address" else "Dirección / Referencia Vivienda") },
+                    leadingIcon = { Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, tint = ConfirmButtonColor) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                if (userProfile.ubicacionDireccion.isNotBlank()) {
+                    Text(
+                        text = "📍 Ubicación registrada en mapa: ${userProfile.ubicacionDireccion}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = ConfirmButtonColor
+                    )
+                }
 
                 OutlinedTextField(
                     value = telefonoText,
@@ -163,6 +225,47 @@ fun FamilyProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                // Resident count controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.People, contentDescription = null, tint = ConfirmButtonColor)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Residentes:",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = { if (cantidadResidentes > 1) cantidadResidentes-- },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Text("-", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            text = "$cantidadResidentes",
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        )
+                        Button(
+                            onClick = { cantidadResidentes++ },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Text("+", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 
@@ -177,36 +280,64 @@ fun FamilyProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = if (StringsHelper.isEnglish(lang)) "Family Members" else "Integrantes de la Familia",
+                    text = if (StringsHelper.isEnglish(lang)) "Family Members" else "Integrantes de la Familia y Parentesco",
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                // Add Member Input
+                // Add Member Inputs
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
-                        value = nuevoMiembroText,
-                        onValueChange = { nuevoMiembroText = it },
-                        placeholder = { Text("ej. Ana Ramírez (Hija)") },
+                        value = nuevoNombreFamiliar,
+                        onValueChange = { nuevoNombreFamiliar = it },
+                        placeholder = { Text("Nombre del familiar") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = parentescoDropdownExpanded,
+                        onExpandedChange = { parentescoDropdownExpanded = !parentescoDropdownExpanded },
+                        modifier = Modifier.weight(0.9f)
+                    ) {
+                        OutlinedTextField(
+                            value = nuevoParentesco,
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = parentescoDropdownExpanded) },
+                            modifier = Modifier.menuAnchor(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = parentescoDropdownExpanded,
+                            onDismissRequest = { parentescoDropdownExpanded = false }
+                        ) {
+                            parentescoOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        nuevoParentesco = option
+                                        parentescoDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                     Button(
                         onClick = {
-                            if (nuevoMiembroText.isNotBlank()) {
-                                integrantesList.add(nuevoMiembroText.trim())
-                                nuevoMiembroText = ""
+                            if (nuevoNombreFamiliar.isNotBlank()) {
+                                integrantesList.add("${nuevoNombreFamiliar.trim()} ($nuevoParentesco)")
+                                nuevoNombreFamiliar = ""
                             }
                         },
-                        enabled = nuevoMiembroText.isNotBlank(),
+                        enabled = nuevoNombreFamiliar.isNotBlank(),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
                     ) {
@@ -216,27 +347,45 @@ fun FamilyProfileScreen(
 
                 HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
 
-                integrantesList.forEachIndexed { index, miembro ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = ConfirmButtonColor, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = miembro,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                if (integrantesList.isEmpty()) {
+                    Text(
+                        text = "Sin integrantes familiares registrados aún.",
+                        fontSize = 12.sp,
+                        color = SubtitleGrayColor
+                    )
+                } else {
+                    integrantesList.forEachIndexed { index, miembro ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = ConfirmButtonColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = miembro,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
 
-                        IconButton(onClick = { integrantesList.removeAt(index) }) {
-                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
+                            IconButton(onClick = { integrantesList.removeAt(index) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Eliminar",
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -245,7 +394,7 @@ fun FamilyProfileScreen(
 
         if (saveSuccessMessage) {
             Text(
-                text = "✓ ¡Datos de vivienda y familia actualizados con éxito!",
+                text = "✓ ¡Datos de vivienda y familia guardados y sincronizados en DataStore!",
                 color = Color(0xFF10B981),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -257,8 +406,11 @@ fun FamilyProfileScreen(
             onClick = {
                 onUpdateProfile(
                     userProfile.copy(
+                        numeroVivienda = numeroViviendaText,
                         vivienda = viviendaText,
+                        ubicacionDireccion = viviendaText,
                         telefono = telefonoText,
+                        cantidadResidentes = cantidadResidentes,
                         integrantesFamilia = integrantesList.toList()
                     )
                 )
