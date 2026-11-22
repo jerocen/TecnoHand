@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atom.tecnohandapp.data.local.StringsHelper
 import com.atom.tecnohandapp.data.models.AppLanguage
 import kotlinx.coroutines.delay
@@ -61,25 +63,20 @@ private val CardBgGray = Color(0xFFC0C0C0)
 private val LightTabGray = Color(0xFFC4C4C4)
 private val SubtitleTextBlue = Color(0xFF6E78A0)
 
-data class VotingItem(
-    val id: String,
-    val titulo: String,
-    val fechaCierre: LocalDateTime,
-    val porcentaje: Float,
-    val presupuestoAsignado: String
-)
-
 @Composable
 fun VotingScreen(
-    lang: AppLanguage = AppLanguage.SPANISH
+    lang: AppLanguage = AppLanguage.SPANISH,
+    votingViewModel: VotingViewModel = viewModel()
 ) {
-    var mainTabSelected by remember { mutableIntStateOf(0) } // 0: Inicio / Activas, 1: Votar, 2: Resultados
-    var activeSubTab by remember { mutableStateOf("Activas") } // "Activas", "Cerradas"
+    var mainTabSelected by remember { mutableIntStateOf(0) }
+    var activeSubTab by remember { mutableStateOf("Activas") }
     var selectedItemForVote by remember { mutableStateOf<VotingItem?>(null) }
     var voteSuccessMessage by remember { mutableStateOf<String?>(null) }
 
-    var votedItemId by remember { mutableStateOf<String?>(null) }
-    val hasVoted = votedItemId != null
+    // Estados persistentes desde el ViewModel
+    val votingList by votingViewModel.votingList.collectAsState()
+    val votedItemIds by votingViewModel.votedItemIds.collectAsState()
+    val totalViviendas = votingViewModel.totalViviendas
 
     var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
@@ -89,18 +86,11 @@ fun VotingScreen(
         }
     }
 
-    val votingList = listOf(
-        VotingItem("VOT-1", "Barda Perimetral", LocalDateTime.now().plusSeconds(15), 0.62f, "$552,000"),
-        VotingItem("VOT-2", "Parque Comunitario", LocalDateTime.now().plusDays(2).plusHours(5), 0.35f, "$408,000"),
-        VotingItem("VOT-3", "Servicios Públicos", LocalDateTime.now().minusDays(1), 0.18f, "$240,000")
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        // --- Top Dark Blue Banner Header ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -121,7 +111,6 @@ fun VotingScreen(
             )
         }
 
-        // --- Screen Content Container ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -130,9 +119,7 @@ fun VotingScreen(
         ) {
             when (mainTabSelected) {
                 0, 1 -> {
-                    // Active / Closed Voting View
                     Column {
-                        // Sub Tabs (Activas / Cerradas)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.padding(bottom = 14.dp)
@@ -174,32 +161,36 @@ fun VotingScreen(
                             votingList.filter { currentTime.isAfter(it.fechaCierre) }
                         }
 
-                        //activeSubTab == "Activas"
-                        if(filteredList.isNotEmpty())
-                        {
+                        if (filteredList.isNotEmpty()) {
                             LazyColumn(
                                 verticalArrangement = Arrangement.spacedBy(14.dp),
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                items(votingList) { item ->
+                                items(filteredList, key = { it.id }) { item ->
+                                    val isVoted = votedItemIds.contains(item.id)
+                                    val porcentaje = (item.votos.toFloat() / totalViviendas).coerceIn(0f, 1f)
+
                                     VotingCardItem(
                                         item = item,
+                                        porcentaje = porcentaje,
                                         lang = lang,
                                         currentTime = currentTime,
-                                        hasVoted = hasVoted,
-                                        isMyVote = votedItemId == item.id,
+                                        isMyVote = isVoted,
                                         onVoteClick = { selectedItemForVote = item }
                                     )
                                 }
                             }
                         } else {
-                            // Closed Voting Message
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (StringsHelper.isEnglish(lang)) "No closed polls at this moment." else "No hay votaciones cerradas en este momento.",
+                                    text = if (activeSubTab == "Activas") {
+                                        if (StringsHelper.isEnglish(lang)) "No active polls at this moment." else "No hay votaciones activas en este momento."
+                                    } else {
+                                        if (StringsHelper.isEnglish(lang)) "No closed polls at this moment." else "No hay votaciones cerradas en este momento."
+                                    },
                                     color = SubtitleTextBlue,
                                     fontSize = 14.sp
                                 )
@@ -209,32 +200,35 @@ fun VotingScreen(
                 }
 
                 2 -> {
-                    // Results View (Matching Screenshot 3)
+                    val totalVotosEmitidos = votingList.sumOf { it.votos }
+
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = if (StringsHelper.isEnglish(lang)) "Closed Voting - 1,284 votes" else "Votación cerrada - 1,284 votos",
+                            text = if (StringsHelper.isEnglish(lang)) "Total votes registered: $totalVotosEmitidos" else "Total de votos registrados: $totalVotosEmitidos",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
                         votingList.forEach { item ->
+                            val porcentaje = (item.votos.toFloat() / totalViviendas).coerceIn(0f, 1f)
+
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = item.titulo,
+                                        text = "${item.titulo} (${item.votos})",
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "${(item.porcentaje * 100).toInt()}%",
+                                        text = "${(porcentaje * 100).toInt()}%",
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -242,7 +236,7 @@ fun VotingScreen(
                                 }
 
                                 LinearProgressIndicator(
-                                    progress = { item.porcentaje },
+                                    progress = { porcentaje },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(10.dp)
@@ -261,7 +255,6 @@ fun VotingScreen(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Total Budget Card
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
@@ -290,7 +283,6 @@ fun VotingScreen(
             }
         }
 
-        // --- Bottom Sub-Navigation Bar (Inicio, Votar, Resultados) ---
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
@@ -303,7 +295,6 @@ fun VotingScreen(
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Option 1: Inicio
                 val isTab0 = mainTabSelected == 0
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -326,7 +317,6 @@ fun VotingScreen(
                     )
                 }
 
-                // Option 2: Votar
                 val isTab1 = mainTabSelected == 1
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -349,7 +339,6 @@ fun VotingScreen(
                     )
                 }
 
-                // Option 3: Resultados
                 val isTab2 = mainTabSelected == 2
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -375,7 +364,6 @@ fun VotingScreen(
         }
     }
 
-    // --- Confirm Vote Dialog (Matching Screenshot 2) ---
     if (selectedItemForVote != null) {
         val item = selectedItemForVote!!
         AlertDialog(
@@ -388,7 +376,6 @@ fun VotingScreen(
                         .padding(top = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Help / Question Icon
                     Box(
                         modifier = Modifier
                             .size(60.dp)
@@ -423,7 +410,6 @@ fun VotingScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Selected Option Highlight Box
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -454,10 +440,7 @@ fun VotingScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick = {
-                            votedItemId = item.id
-                            voteSuccessMessage = "¡Voto registrado para '${item.titulo}'!"
-                            selectedItemForVote = null },
+                        onClick = { selectedItemForVote = null },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(20.dp),
                         border = BorderStroke(1.2.dp, PrimaryDarkBlue)
@@ -467,6 +450,7 @@ fun VotingScreen(
 
                     Button(
                         onClick = {
+                            votingViewModel.registrarVoto(item.id)
                             voteSuccessMessage = "¡Voto registrado para '${item.titulo}'!"
                             selectedItemForVote = null
                         },
@@ -474,7 +458,7 @@ fun VotingScreen(
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkBlue)
                     ) {
-                        Text(if (StringsHelper.isEnglish(lang)) "Yes, confirm" else "Si, confirmar", color = Color.White)
+                        Text(if (StringsHelper.isEnglish(lang)) "Yes, confirm" else "Sí, confirmar", color = Color.White)
                     }
                 }
             },
@@ -502,9 +486,9 @@ fun VotingScreen(
 @Composable
 private fun VotingCardItem(
     item: VotingItem,
+    porcentaje: Float,
     lang: AppLanguage,
     currentTime: LocalDateTime,
-    hasVoted: Boolean,
     isMyVote: Boolean,
     onVoteClick: () -> Unit
 ) {
@@ -522,11 +506,11 @@ private fun VotingCardItem(
         if (days > 0) {
             if (StringsHelper.isEnglish(lang)) "Closes in $days d $hours h" else "Cierra en $days d $hours h"
         } else {
-            // Cuenta regresiva estilo cronómetro
             if (StringsHelper.isEnglish(lang)) "Closes in ${hours}h ${minutes}m ${seconds}s"
             else "Cierra en ${hours}h ${minutes}m ${seconds}s"
         }
     }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -548,9 +532,8 @@ private fun VotingCardItem(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Progress Bar
             LinearProgressIndicator(
-                progress = { item.porcentaje },
+                progress = { porcentaje },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(10.dp)
@@ -567,7 +550,7 @@ private fun VotingCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (StringsHelper.isEnglish(lang)) "Turnout ${(item.porcentaje * 100).toInt()}%" else "Participación ${(item.porcentaje * 100).toInt()}%",
+                    text = if (StringsHelper.isEnglish(lang)) "Turnout ${(porcentaje * 100).toInt()}% (${item.votos})" else "Participación ${(porcentaje * 100).toInt()}% (${item.votos})",
                     fontSize = 13.sp,
                     color = SubtitleTextBlue,
                     fontWeight = FontWeight.Medium
@@ -575,9 +558,8 @@ private fun VotingCardItem(
 
                 Button(
                     onClick = onVoteClick,
-                    enabled = !hasVoted,
+                    enabled = !isMyVote && !isClosed,
                     shape = RoundedCornerShape(14.dp),
-                    //colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkBlue)
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrimaryDarkBlue,
                         disabledContainerColor = if (isMyVote) ProgressBlue else Color.Gray.copy(alpha = 0.5f),
@@ -585,10 +567,9 @@ private fun VotingCardItem(
                     )
                 ) {
                     Text(
-                        //text = if (StringsHelper.isEnglish(lang)) "VOTE" else "VOTAR",
                         text = when {
                             isMyVote -> if (StringsHelper.isEnglish(lang)) "VOTED" else "VOTADO"
-                            hasVoted -> if (StringsHelper.isEnglish(lang)) "LOCKED" else "BLOQUEADO"
+                            isClosed -> if (StringsHelper.isEnglish(lang)) "CLOSED" else "CERRADA"
                             else -> if (StringsHelper.isEnglish(lang)) "VOTE" else "VOTAR"
                         },
                         fontSize = 12.sp,

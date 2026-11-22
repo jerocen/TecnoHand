@@ -83,7 +83,8 @@ sealed class RoleNavTab(val index: Int, val icon: ImageVector, val labelEs: Stri
 fun MainContainerScreen(
     scanQrViewModel: ScanQrViewModel = viewModel(),
     reportsViewModel: ReportsViewModel = viewModel(),
-    alertsViewModel: AlertsViewModel = viewModel()
+    alertsViewModel: AlertsViewModel = viewModel(),
+    votingViewModel: VotingViewModel = viewModel()
 ) {
     val scanUiState by scanQrViewModel.uiState.collectAsState()
     var currentUserProfile by remember { mutableStateOf<UserProfile?>(null) }
@@ -208,7 +209,7 @@ fun MainContainerScreen(
                             }
                         } else {
                             when (selectedTabIndex) {
-                                0 -> VotingScreen(lang = lang)
+                                0 -> VotingScreen(lang = lang, votingViewModel = votingViewModel)
                                 1 -> GuestQrGeneratorScreen(userProfile = profile, lang = lang)
                                 2 -> ReportsAdminScreen(viewModel = reportsViewModel, lang = lang)
                                 3 -> AlertsNotificationsScreen(viewModel = alertsViewModel, lang = lang)
