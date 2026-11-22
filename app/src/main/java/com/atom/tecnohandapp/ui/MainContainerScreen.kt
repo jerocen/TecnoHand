@@ -32,17 +32,20 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,10 +56,12 @@ import com.atom.tecnohandapp.HistoryDialog
 import com.atom.tecnohandapp.R
 import com.atom.tecnohandapp.ScanQrScreen
 import com.atom.tecnohandapp.data.local.StringsHelper
+import com.atom.tecnohandapp.data.local.UserDataStore
 import com.atom.tecnohandapp.data.models.AppTheme
 import com.atom.tecnohandapp.data.models.UserProfile
 import com.atom.tecnohandapp.data.models.UserRole
 import com.atom.tecnohandapp.ui.theme.TecnoHandAppTheme
+import kotlinx.coroutines.launch
 
 private val AppBgColor = Color(0xFFF8FAFC)
 private val DarkTextColor = Color(0xFF0A1838)
@@ -87,9 +92,21 @@ fun MainContainerScreen(
     votingViewModel: VotingViewModel = viewModel()
 ) {
     val scanUiState by scanQrViewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val userDataStore = remember { UserDataStore(context) }
+    val coroutineScope = rememberCoroutineScope()
+
     var currentUserProfile by remember { mutableStateOf<UserProfile?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val lang = scanUiState.selectedLanguage
+
+    // Load last logged user session from DataStore on launch
+    LaunchedEffect(Unit) {
+        val active = userDataStore.getActiveUser()
+        if (active != null) {
+            currentUserProfile = active
+        }
+    }
 
     val isDark = when (scanUiState.selectedTheme) {
         AppTheme.LIGHT -> false
@@ -203,8 +220,18 @@ fun MainContainerScreen(
                                 3 -> FamilyProfileScreen(
                                     userProfile = profile,
                                     lang = lang,
-                                    onUpdateProfile = { updated -> currentUserProfile = updated },
-                                    onLogout = { currentUserProfile = null }
+                                    onUpdateProfile = { updated ->
+                                        currentUserProfile = updated
+                                        coroutineScope.launch {
+                                            userDataStore.updateUserProfile(updated)
+                                        }
+                                    },
+                                    onLogout = {
+                                        coroutineScope.launch {
+                                            userDataStore.saveLastLoggedUserEmail(null)
+                                        }
+                                        currentUserProfile = null
+                                    }
                                 )
                             }
                         } else {
@@ -216,8 +243,18 @@ fun MainContainerScreen(
                                 4 -> FamilyProfileScreen(
                                     userProfile = profile,
                                     lang = lang,
-                                    onUpdateProfile = { updated -> currentUserProfile = updated },
-                                    onLogout = { currentUserProfile = null }
+                                    onUpdateProfile = { updated ->
+                                        currentUserProfile = updated
+                                        coroutineScope.launch {
+                                            userDataStore.updateUserProfile(updated)
+                                        }
+                                    },
+                                    onLogout = {
+                                        coroutineScope.launch {
+                                            userDataStore.saveLastLoggedUserEmail(null)
+                                        }
+                                        currentUserProfile = null
+                                    }
                                 )
                             }
                         }
