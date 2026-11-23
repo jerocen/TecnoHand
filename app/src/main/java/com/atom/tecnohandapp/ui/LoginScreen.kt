@@ -101,7 +101,7 @@ import com.atom.tecnohandapp.data.models.AppLanguage
 import com.atom.tecnohandapp.data.models.FamiliaMember
 import com.atom.tecnohandapp.data.models.UserProfile
 import com.atom.tecnohandapp.data.models.UserRole
-import com.google.android.gms.location.LocationServices
+import com.atom.tecnohandapp.data.network.RetrofitClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
@@ -115,6 +115,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.atom.tecnohandapp.data.models.LoginRequest
+import com.atom.tecnohandapp.data.models.RegisterRequest
+import com.google.android.gms.location.LocationServices
 
 private val ConfirmButtonColor = Color(0xFF5A82ED)
 private val SubtitleGrayColor = Color(0xFF64748B)
@@ -453,21 +456,36 @@ fun LoginScreen(
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
-                                        val matched = userDataStore.authenticateUser(loginUserInput, loginPasswordInput)
-                                        if (matched != null) {
-                                            onLoginSuccess(matched)
-                                        } else {
-                                            // Fallback profile if email entered matches format
-                                            val isGuard = loginUserInput.contains("guardia", ignoreCase = true)
-                                            val created = UserProfile(
-                                                id = if (loginUserInput.isNotBlank()) loginUserInput else "RES-1001",
-                                                email = if (loginUserInput.contains("@")) loginUserInput else "$loginUserInput@tecnohand.com",
-                                                password = loginPasswordInput,
-                                                nombre = if (isGuard) "Oficial Caseta" else "Usuario TecnoHand",
-                                                rol = if (isGuard) UserRole.GUARD else UserRole.RESIDENT
+                                        loginErrorMessage = null
+                                        try {
+                                            val response = RetrofitClient.getService().login(
+                                                LoginRequest(
+                                                    email = loginUserInput.trim(),
+                                                    password = loginPasswordInput
+                                                )
                                             )
-                                            userDataStore.registerUser(created)
-                                            onLoginSuccess(created)
+                                            if (response.isSuccessful && response.body() != null) {
+                                                val u = response.body()!!
+                                                val roleEnum = when (u.rol.uppercase()) {
+                                                    "GUARD" -> UserRole.GUARD
+                                                    "ADMIN" -> UserRole.ADMIN
+                                                    else -> UserRole.RESIDENT
+                                                }
+                                                val profile = UserProfile(
+                                                    id = u.id.toString(),
+                                                    email = u.email,
+                                                    password = loginPasswordInput,
+                                                    nombre = u.nombre,
+                                                    telefono = u.telefono ?: "",
+                                                    rol = roleEnum
+                                                )
+                                                userDataStore.registerUser(profile) // guarda sesión local
+                                                onLoginSuccess(profile)
+                                            } else {
+                                                loginErrorMessage = "Credenciales incorrectas (${response.code()})"
+                                            }
+                                        } catch (e: Exception) {
+                                            loginErrorMessage = "Error de conexión con la API: ${e.localizedMessage}"
                                         }
                                     }
                                 },
@@ -1048,8 +1066,29 @@ fun LoginScreen(
                                             )
 
                                             coroutineScope.launch {
-                                                userDataStore.registerUser(createdProfile)
-                                                onLoginSuccess(createdProfile)
+                                                try {
+                                                    val response = RetrofitClient.getService().register(
+                                                        RegisterRequest(
+                                                            nombre = if (fullNombre.isNotBlank()) fullNombre else emailInput.trim(),
+                                                            telefono = telefonoInput.trim(),
+                                                            email = emailInput.trim(),
+                                                            password = passwordInput,
+                                                            rol = selectedRole.name
+                                                        )
+                                                    )
+                                                    if (response.isSuccessful && response.body() != null) {
+                                                        val u = response.body()!!
+                                                        val syncedProfile = createdProfile.copy(id = u.id.toString())
+                                                        userDataStore.registerUser(syncedProfile)
+                                                        onLoginSuccess(syncedProfile)
+                                                    } else {
+                                                        loginErrorMessage = "No se pudo registrar en la BD (${response.code()})"
+                                                    }
+                                                } catch (e: Exception) {
+                                                    // Si no hay conexión, guarda al menos en DataStore como respaldo
+                                                    userDataStore.registerUser(createdProfile)
+                                                    onLoginSuccess(createdProfile)
+                                                }
                                             }
                                         },
                                         modifier = Modifier
@@ -1182,6 +1221,7 @@ fun LoginScreen(
     }
 
     // --- SECRET ADMIN DEVELOPER PANEL DIALOG (Admin 1: Residente, Admin 2: Guardia) ---
+    // --- SECRET ADMIN DEVELOPER PANEL DIALOG ---
     if (showAdminDeveloperPanel) {
         AlertDialog(
             onDismissRequest = { showAdminDeveloperPanel = false },
@@ -1241,6 +1281,32 @@ fun LoginScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                     ) {
                         Text("Admin 2: Iniciar como Guardia 🛡️", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+
+                    // Admin 3 (Administrador Preset)
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val adminUser = UserProfile(
+                                    id = "ADM-001",
+                                    email = "admin@tecnohand.com",
+                                    password = "123456",
+                                    nombre = "Administrador TecnoHand",
+                                    rol = UserRole.ADMIN,
+                                    colonia = "Colonia Los Pinos"
+                                )
+                                userDataStore.registerUser(adminUser)
+                                showAdminDeveloperPanel = false
+                                onLoginSuccess(adminUser)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF060060))
+                    ) {
+                        Text("Admin 3: Iniciar como Administrador 👑", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                     }
                 }
             },

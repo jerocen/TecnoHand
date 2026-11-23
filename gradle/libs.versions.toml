@@ -14,6 +14,7 @@ retrofit = "2.11.0"
 okhttp = "4.12.0"
 lifecycleViewmodelCompose = "2.8.7"
 datastore = "1.1.2"
+playServicesCloudMessaging = "17.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -48,6 +49,7 @@ maps-compose = { group = "com.google.maps.android", name = "maps-compose", versi
 osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version = "6.1.18" }
 zxing-core = { group = "com.google.zxing", name = "core", version = "3.5.3" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+play-services-cloud-messaging = { group = "com.google.android.gms", name = "play-services-cloud-messaging", version.ref = "playServicesCloudMessaging" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

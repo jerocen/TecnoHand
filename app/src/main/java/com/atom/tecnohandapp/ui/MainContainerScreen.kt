@@ -58,8 +58,10 @@ import com.atom.tecnohandapp.ScanQrScreen
 import com.atom.tecnohandapp.data.local.StringsHelper
 import com.atom.tecnohandapp.data.local.UserDataStore
 import com.atom.tecnohandapp.data.models.AppTheme
+import com.atom.tecnohandapp.data.models.UpdateProfileRequest
 import com.atom.tecnohandapp.data.models.UserProfile
 import com.atom.tecnohandapp.data.models.UserRole
+import com.atom.tecnohandapp.data.network.RetrofitClient
 import com.atom.tecnohandapp.ui.theme.TecnoHandAppTheme
 import kotlinx.coroutines.launch
 
@@ -236,7 +238,12 @@ fun MainContainerScreen(
                             }
                         } else {
                             when (selectedTabIndex) {
-                                0 -> VotingScreen(lang = lang, votingViewModel = votingViewModel)
+                                //0 -> VotingScreen(lang = lang, votingViewModel = votingViewModel)
+                                0 -> VotingScreen(
+                                    lang = lang,
+                                    isAdmin = profile.rol == UserRole.ADMIN,
+                                    votingViewModel = votingViewModel
+                                )
                                 1 -> GuestQrGeneratorScreen(userProfile = profile, lang = lang)
                                 2 -> ReportsAdminScreen(viewModel = reportsViewModel, lang = lang)
                                 3 -> AlertsNotificationsScreen(viewModel = alertsViewModel, lang = lang)
@@ -246,6 +253,19 @@ fun MainContainerScreen(
                                     onUpdateProfile = { updated ->
                                         currentUserProfile = updated
                                         coroutineScope.launch {
+                                            try {
+                                                if (updated.id.all { it.isDigit() }) {
+                                                    RetrofitClient.getService().actualizarPerfil(
+                                                        cuentaId = updated.id,
+                                                        request = UpdateProfileRequest(
+                                                            nombre = updated.nombre,
+                                                            telefono = updated.telefono
+                                                        )
+                                                    )
+                                                }
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
                                             userDataStore.updateUserProfile(updated)
                                         }
                                     },

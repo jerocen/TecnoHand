@@ -249,7 +249,8 @@ private fun ReportCardItem(
             ) {
                 // Category & Housing
                 Text(
-                    text = "${report.categoria.uppercase()} • ${report.viviendaDireccion}",
+                    //text = "${report.categoria.uppercase()} • ${report.viviendaDireccion}",
+                    text = "${report.categoria.uppercase()} • ${report.viviendaDireccion ?: "Área común"}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = SubtitleGrayColor

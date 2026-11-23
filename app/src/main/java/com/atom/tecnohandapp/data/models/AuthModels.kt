@@ -2,7 +2,8 @@ package com.atom.tecnohandapp.data.models
 
 enum class UserRole {
     GUARD,    // Guardia: Escaneo QR, Reportes, Alertas
-    RESIDENT  // Residente/Habitante: Votaciones, Crear QR Invitados, Reportes, Alertas, Mi Familia/Vivienda
+    RESIDENT,  // Residente/Habitante: Votaciones, Crear QR Invitados, Reportes, Alertas, Mi Familia/Vivienda
+    ADMIN
 }
 
 data class FamiliaMember(
@@ -30,4 +31,41 @@ data class UserProfile(
     val cantidadResidentes: Int = 3,
     val colonia: String = "Colonia Los Pinos",
     val integrantesFamilia: List<String> = listOf("María Ramírez (Esposa)", "Lucas Ramírez (Hijo)", "Sofía Ramírez (Hija)")
+)
+
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+data class RegisterRequest(
+    val nombre: String,
+    val telefono: String,
+    val email: String,
+    val password: String,
+    val rol: String // "RESIDENT", "GUARD", "ADMIN"
+)
+
+data class UpdateProfileRequest(
+    val nombre: String,
+    val telefono: String
+)
+
+data class AuthUserResponse(
+    val id: Long,
+    val persona_id: Long,
+    val nombre: String,
+    val telefono: String?,
+    val email: String,
+    val rol: String
+)
+
+data class AdminUserItem(
+    val id: Long,
+    val persona_id: Long,
+    val nombre: String,
+    val telefono: String?,
+    val email: String,
+    val rol: String,
+    val estado: String
 )

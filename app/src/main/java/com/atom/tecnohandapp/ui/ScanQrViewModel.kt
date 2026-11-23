@@ -71,6 +71,11 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
     private var lastProcessTime = 0L
     private var lastProcessedToken: String? = null
 
+    private val offlineUsageCount = mutableMapOf<String, Int>()
+
+    // Guarda los accesos validados sin conexión para mostrarlos en el historial
+    private val offlineHistoryLogs = mutableListOf<AccessLogItem>()
+
     init {
         RetrofitClient.getService(prefs.getServerUrl())
         loadGithubCommits()
@@ -169,86 +174,77 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun performLocalTestQrValidation(token: String, isEng: Boolean): QrValidationResponse? {
         val clean = sanitizeToken(token)
-        return when {
-            clean.contains("PEDRO") || clean == "QR_PEDRO_001" -> QrValidationResponse(
-                valido = true,
-                resultado = "permitido",
-                mensaje = if (isEng) "Access GRANTED! Welcome Pedro Visitante" else "¡Acceso PERMITIDO! Bienvenid@ Pedro Visitante",
-                motivo = "QR vigente en sistema",
-                detalles = QrDetails(
-                    nombre = "Pedro Visitante",
-                    tipo = "invitado",
-                    direccion = "Calle Roble 101",
-                    residente = "Ana Torres",
-                    colonia = "Colonia Los Pinos",
-                    usosMaximos = 2,
-                    usosRealizados = 1,
-                    usosRestantes = 1
-                )
-            )
-            clean.contains("MARIA") || clean == "QR_MARIA_001" -> QrValidationResponse(
-                valido = true,
-                resultado = "permitido",
-                mensaje = if (isEng) "Access GRANTED! Welcome Maria Repartidora" else "¡Acceso PERMITIDO! Bienvenid@ Maria Repartidora",
-                motivo = "QR vigente en sistema",
-                detalles = QrDetails(
-                    nombre = "Maria Repartidora",
-                    tipo = "invitado",
-                    direccion = "Calle Roble 102",
-                    residente = "Luis Mendoza",
-                    colonia = "Colonia Los Pinos",
-                    usosMaximos = 1,
-                    usosRealizados = 1,
-                    usosRestantes = 0
-                )
-            )
-            clean.contains("JORGE") || clean == "QR_JORGE_001" -> QrValidationResponse(
-                valido = true,
-                resultado = "permitido",
-                mensaje = if (isEng) "Access GRANTED! Welcome Jorge Familiar" else "¡Acceso PERMITIDO! Bienvenid@ Jorge Familiar",
-                motivo = "QR vigente en sistema",
-                detalles = QrDetails(
-                    nombre = "Jorge Familiar",
-                    tipo = "invitado",
-                    direccion = "Calle Cedro 210",
-                    residente = "Sofia Ramirez",
-                    colonia = "Colonia Los Pinos",
-                    usosMaximos = 4,
-                    usosRealizados = 1,
-                    usosRestantes = 3
-                )
-            )
-            clean.contains("PAULA") || clean == "QR_PAULA_001" -> QrValidationResponse(
-                valido = true,
-                resultado = "permitido",
-                mensaje = if (isEng) "Access GRANTED! Welcome Paula Tecnica" else "¡Acceso PERMITIDO! Bienvenid@ Paula Tecnica",
-                motivo = "QR vigente en sistema",
-                detalles = QrDetails(
-                    nombre = "Paula Tecnica",
-                    tipo = "invitado",
-                    direccion = "Calle Cedro 212",
-                    residente = "Carlos Vega",
-                    colonia = "Colonia Los Pinos",
-                    usosMaximos = 1,
-                    usosRealizados = 1,
-                    usosRestantes = 0
-                )
-            )
-            clean.contains("RESIDENTE") || clean.contains("ANA") || clean == "QR_RESIDENTE_ANA" -> QrValidationResponse(
-                valido = true,
-                resultado = "permitido",
-                mensaje = if (isEng) "Access GRANTED! Welcome Ana Torres" else "¡Acceso PERMITIDO! Bienvenid@ Ana Torres",
-                motivo = "Usuario registrado activo",
-                detalles = QrDetails(
-                    nombre = "Ana Torres",
-                    tipo = "registrado",
-                    direccion = "Calle Roble 101",
-                    residente = "Ana Torres",
-                    colonia = "Colonia Los Pinos"
-                )
-            )
-            else -> null
+
+        // Definimos los datos base de los QRs offline (nombre, tipo, dirección, residente, usosMaximos)
+        data class OfflineQrData(
+            val key: String,
+            val nombre: String,
+            val tipo: String,
+            val direccion: String,
+            val residente: String,
+            val usosMaximos: Int? // null = ilimitado (residente)
+        )
+
+        val qrData = when {
+            clean.contains("PEDRO") || clean == "QR_PEDRO_001" ->
+                OfflineQrData("QR_PEDRO_001", "Pedro Visitante", "invitado", "Calle Roble 101", "Ana Torres", 2)
+            clean.contains("MARIA") || clean == "QR_MARIA_001" ->
+                OfflineQrData("QR_MARIA_001", "Maria Repartidora", "invitado", "Calle Roble 102", "Luis Mendoza", 1)
+            clean.contains("JORGE") || clean == "QR_JORGE_001" ->
+                OfflineQrData("QR_JORGE_001", "Jorge Familiar", "invitado", "Calle Cedro 210", "Sofia Ramirez", 4)
+            clean.contains("PAULA") || clean == "QR_PAULA_001" ->
+                OfflineQrData("QR_PAULA_001", "Paula Tecnica", "invitado", "Calle Cedro 212", "Carlos Vega", 1)
+            clean.contains("RESIDENTE") || clean.contains("ANA") || clean == "QR_RESIDENTE_ANA" ->
+                OfflineQrData("QR_RESIDENTE_ANA", "Ana Torres", "registrado", "Calle Roble 101", "Ana Torres", null)
+            clean.startsWith("THQR1.") ->
+                OfflineQrData(clean, "Visitante (Pase App)", "invitado", "Vivienda Autorizada", "Residente TecnoHand", 1)
+            else -> return null
         }
+
+        val currentUses = offlineUsageCount[qrData.key] ?: 0
+
+        // Si tiene límite de usos y ya se agotó, rechazar
+        if (qrData.usosMaximos != null && currentUses >= qrData.usosMaximos) {
+            return QrValidationResponse(
+                valido = false,
+                resultado = "rechazado",
+                mensaje = if (isEng) "Access DENIED - No uses left" else "Acceso RECHAZADO - Sin usos disponibles",
+                motivo = if (isEng) "This QR code has already been used (${qrData.usosMaximos}/${qrData.usosMaximos})."
+                else "Este código QR ya consumió todos sus usos (${qrData.usosMaximos}/${qrData.usosMaximos}).",
+                detalles = QrDetails(
+                    nombre = qrData.nombre,
+                    tipo = qrData.tipo,
+                    direccion = qrData.direccion,
+                    residente = qrData.residente,
+                    colonia = "Colonia Los Pinos",
+                    usosMaximos = qrData.usosMaximos,
+                    usosRealizados = currentUses,
+                    usosRestantes = 0
+                )
+            )
+        }
+
+        // Incrementar uso y permitir acceso
+        val newUses = currentUses + 1
+        offlineUsageCount[qrData.key] = newUses
+        val remaining = qrData.usosMaximos?.let { (it - newUses).coerceAtLeast(0) }
+
+        return QrValidationResponse(
+            valido = true,
+            resultado = "permitido",
+            mensaje = if (isEng) "Access GRANTED! Welcome ${qrData.nombre}" else "¡Acceso PERMITIDO! Bienvenid@ ${qrData.nombre}",
+            motivo = if (isEng) "Validated in Offline Mode" else "Validado en Modo Offline",
+            detalles = QrDetails(
+                nombre = qrData.nombre,
+                tipo = qrData.tipo,
+                direccion = qrData.direccion,
+                residente = qrData.residente,
+                colonia = "Colonia Los Pinos",
+                usosMaximos = qrData.usosMaximos,
+                usosRealizados = newUses,
+                usosRestantes = remaining
+            )
+        )
     }
 
     fun onQrDetected(code: String) {
@@ -393,7 +389,8 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
             val localResult = performLocalTestQrValidation(token, isEng)
 
             // If offline demo mode is enabled, validate locally immediately
-            if (_uiState.value.isOfflineDemoMode) {
+            if (_uiState.value.isOfflineDemoMode)
+            {
                 delay(400)
                 val finalRes = localResult ?: QrValidationResponse(
                     valido = false,
@@ -405,15 +402,21 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
                         "El código QR '$token' no fue encontrado en la base de datos de TecnoHand."
                 )
 
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        validationResponse = finalRes,
-                        showResultSheet = true,
-                        showManualDialog = false
+                offlineHistoryLogs.add(
+                    0,
+                    AccessLogItem(
+                        id = System.currentTimeMillis(),
+                        tipo = tipo,
+                        resultado = finalRes.resultado ?: "rechazado",
+                        motivo = finalRes.motivo ?: finalRes.mensaje ?: "Validación offline",
+                        fechaHora = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                            .format(java.util.Date()),
+                        colonia = finalRes.detalles?.colonia ?: "Colonia Los Pinos",
+                        guardia = "Guardia (Offline)",
+                        personaNombre = finalRes.detalles?.nombre ?: "Desconocido",
+                        viviendaDireccion = finalRes.detalles?.direccion ?: "N/A"
                     )
-                }
-                return@launch
+                )
             }
 
             try {
@@ -520,6 +523,16 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun loadAccessHistory() {
+        if (_uiState.value.isOfflineDemoMode) {
+            _uiState.update {
+                it.copy(
+                    isHistoryLoading = false,
+                    historyLogs = offlineHistoryLogs.toList(),
+                    showHistoryDialog = true
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isHistoryLoading = true) }
 

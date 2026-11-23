@@ -10,6 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.atom.tecnohandapp.data.models.AdminUserItem
+import com.atom.tecnohandapp.data.models.UserRole
+import com.atom.tecnohandapp.data.network.RetrofitClient
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -79,6 +87,37 @@ fun FamilyProfileScreen(
 
     val integrantesList = remember { mutableStateListOf(*userProfile.integrantesFamilia.toTypedArray()) }
     var saveSuccessMessage by remember { mutableStateOf(false) }
+
+    val isAdmin = userProfile.rol == UserRole.ADMIN
+    val coroutineScope = rememberCoroutineScope()
+    var registeredUsers by remember { mutableStateOf<List<AdminUserItem>>(emptyList()) }
+    var isLoadingUsers by remember { mutableStateOf(false) }
+    var usersError by remember { mutableStateOf<String?>(null) }
+
+    fun loadRegisteredUsers() {
+        coroutineScope.launch {
+            isLoadingUsers = true
+            usersError = null
+            try {
+                val response = RetrofitClient.getService().obtenerUsuarios()
+                if (response.isSuccessful && response.body() != null) {
+                    registeredUsers = response.body()!!
+                } else {
+                    usersError = "Error al cargar usuarios (${response.code()})"
+                }
+            } catch (e: Exception) {
+                usersError = "Error de conexión: ${e.localizedMessage}"
+            } finally {
+                isLoadingUsers = false
+            }
+        }
+    }
+
+    LaunchedEffect(isAdmin) {
+        if (isAdmin) {
+            loadRegisteredUsers()
+        }
+    }
 
     val parentescoOptions = listOf(
         "Esposo/a", "Hijo/a", "Padre/Madre", "Hermano/a", "Abuelo/a", "Tío/a", "Otro"
@@ -400,8 +439,154 @@ fun FamilyProfileScreen(
                 fontWeight = FontWeight.Bold
             )
         }
+        if (saveSuccessMessage) {
+            Text(
+                text = "✓ ¡Datos de vivienda y familia guardados y sincronizados en DataStore!",
+                color = Color(0xFF10B981),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
-        // Save Button
+        // --- DIRECTORIO DE USUARIOS REGISTRADOS (SOLO ADMIN) ---
+        if (isAdmin) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Usuarios Registrados (BD)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Total: ${registeredUsers.size} cuentas activas/registradas",
+                                fontSize = 11.sp,
+                                color = SubtitleGrayColor
+                            )
+                        }
+                        IconButton(onClick = { loadRegisteredUsers() }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Recargar usuarios",
+                                tint = ConfirmButtonColor
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+
+                    when {
+                        isLoadingUsers -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = ConfirmButtonColor,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        usersError != null -> {
+                            Text(
+                                text = usersError!!,
+                                color = Color(0xFFEF4444),
+                                fontSize = 12.sp
+                            )
+                        }
+                        registeredUsers.isEmpty() -> {
+                            Text(
+                                text = "No hay usuarios registrados en la base de datos.",
+                                fontSize = 12.sp,
+                                color = SubtitleGrayColor
+                            )
+                        }
+                        else -> {
+                            registeredUsers.forEach { u ->
+                                val estadoColor = when (u.estado.lowercase()) {
+                                    "activa" -> Color(0xFF10B981)
+                                    "suspendida" -> Color(0xFFF59E0B)
+                                    else -> Color(0xFFEF4444)
+                                }
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "#${u.id} • ${u.nombre}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = estadoColor.copy(alpha = 0.15f)
+                                            ) {
+                                                Text(
+                                                    text = u.estado.uppercase(),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = estadoColor,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = u.email,
+                                            fontSize = 12.sp,
+                                            color = SubtitleGrayColor
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = "Tel: ${u.telefono?.ifBlank { "Sin teléfono" } ?: "Sin teléfono"}",
+                                                fontSize = 11.sp,
+                                                color = SubtitleGrayColor
+                                            )
+                                            Text(
+                                                text = "ROL: ${u.rol}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ConfirmButtonColor
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Button(
             onClick = {
                 onUpdateProfile(

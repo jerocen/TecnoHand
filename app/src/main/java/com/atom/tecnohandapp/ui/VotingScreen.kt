@@ -18,7 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.Info
@@ -29,9 +31,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,6 +71,7 @@ private val SubtitleTextBlue = Color(0xFF6E78A0)
 @Composable
 fun VotingScreen(
     lang: AppLanguage = AppLanguage.SPANISH,
+    isAdmin: Boolean = false,
     votingViewModel: VotingViewModel = viewModel()
 ) {
     var mainTabSelected by remember { mutableIntStateOf(0) }
@@ -73,7 +79,10 @@ fun VotingScreen(
     var selectedItemForVote by remember { mutableStateOf<VotingItem?>(null) }
     var voteSuccessMessage by remember { mutableStateOf<String?>(null) }
 
-    // Estados persistentes desde el ViewModel
+    // Estados exclusivos para Administrador
+    var showAddPollDialog by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<VotingItem?>(null) }
+
     val votingList by votingViewModel.votingList.collectAsState()
     val votedItemIds by votingViewModel.votedItemIds.collectAsState()
     val totalViviendas = votingViewModel.totalViviendas
@@ -122,7 +131,10 @@ fun VotingScreen(
                     Column {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.padding(bottom = 14.dp)
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 14.dp)
                         ) {
                             val isActive = activeSubTab == "Activas"
                             Surface(
@@ -153,6 +165,23 @@ fun VotingScreen(
                                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp)
                                 )
                             }
+
+                            if (isAdmin) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF10B981),
+                                    modifier = Modifier.clickable { showAddPollDialog = true }
+                                ) {
+                                    Text(
+                                        text = if (StringsHelper.isEnglish(lang)) "+ New" else "+ Nueva",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
                         }
 
                         val filteredList = if (activeSubTab == "Activas") {
@@ -176,7 +205,9 @@ fun VotingScreen(
                                         lang = lang,
                                         currentTime = currentTime,
                                         isMyVote = isVoted,
-                                        onVoteClick = { selectedItemForVote = item }
+                                        isAdmin = isAdmin,
+                                        onVoteClick = { selectedItemForVote = item },
+                                        onDeleteClick = { itemToDelete = item }
                                     )
                                 }
                             }
@@ -364,6 +395,7 @@ fun VotingScreen(
         }
     }
 
+    // Diálogo de confirmación de voto
     if (selectedItemForVote != null) {
         val item = selectedItemForVote!!
         AlertDialog(
@@ -467,6 +499,7 @@ fun VotingScreen(
         )
     }
 
+    // Diálogo de voto exitoso
     if (voteSuccessMessage != null) {
         AlertDialog(
             onDismissRequest = { voteSuccessMessage = null },
@@ -481,6 +514,122 @@ fun VotingScreen(
             containerColor = Color.White
         )
     }
+
+    // Diálogo para AGREGAR encuesta (Solo Admin)
+    if (showAddPollDialog && isAdmin) {
+        var nuevoTitulo by remember { mutableStateOf("") }
+        var nuevaDesc by remember { mutableStateOf("") }
+        var nuevoPresupuesto by remember { mutableStateOf("") }
+        var duracionHoras by remember { mutableStateOf("24") }
+
+        AlertDialog(
+            onDismissRequest = { showAddPollDialog = false },
+            title = {
+                Text(
+                    text = if (StringsHelper.isEnglish(lang)) "New Poll" else "Nueva Encuesta",
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryDarkBlue
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = nuevoTitulo,
+                        onValueChange = { nuevoTitulo = it },
+                        label = { Text(if (StringsHelper.isEnglish(lang)) "Poll Title" else "Título de la encuesta") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevaDesc,
+                        onValueChange = { nuevaDesc = it },
+                        label = { Text(if (StringsHelper.isEnglish(lang)) "Description" else "Descripción") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevoPresupuesto,
+                        onValueChange = { nuevoPresupuesto = it },
+                        label = { Text(if (StringsHelper.isEnglish(lang)) "Budget (e.g. $150,000)" else "Presupuesto (ej. $150,000)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = duracionHoras,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) duracionHoras = it },
+                        label = { Text(if (StringsHelper.isEnglish(lang)) "Duration (hours)" else "Duración (en horas)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        votingViewModel.agregarEncuesta(
+                            titulo = nuevoTitulo,
+                            descripcion = nuevaDesc,
+                            presupuesto = nuevoPresupuesto,
+                            duracionHoras = duracionHoras.toLongOrNull() ?: 24L
+                        )
+                        showAddPollDialog = false
+                    },
+                    enabled = nuevoTitulo.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkBlue)
+                ) {
+                    Text(if (StringsHelper.isEnglish(lang)) "Create" else "Crear", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showAddPollDialog = false }) {
+                    Text(if (StringsHelper.isEnglish(lang)) "Cancel" else "Cancelar", color = PrimaryDarkBlue)
+                }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = Color.White
+        )
+    }
+
+    // Diálogo para ELIMINAR encuesta (Solo Admin)
+    if (itemToDelete != null && isAdmin) {
+        val target = itemToDelete!!
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = {
+                Text(
+                    text = if (StringsHelper.isEnglish(lang)) "Delete Poll" else "Eliminar Encuesta",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFDC2626)
+                )
+            },
+            text = {
+                Text(
+                    text = if (StringsHelper.isEnglish(lang))
+                        "Are you sure you want to delete '${target.titulo}'? This action cannot be undone."
+                    else
+                        "¿Seguro que deseas eliminar '${target.titulo}'? Esta acción no se puede deshacer."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        votingViewModel.eliminarEncuesta(target.id)
+                        itemToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) {
+                    Text(if (StringsHelper.isEnglish(lang)) "Delete" else "Eliminar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { itemToDelete = null }) {
+                    Text(if (StringsHelper.isEnglish(lang)) "Cancel" else "Cancelar", color = PrimaryDarkBlue)
+                }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = Color.White
+        )
+    }
 }
 
 @Composable
@@ -490,7 +639,9 @@ private fun VotingCardItem(
     lang: AppLanguage,
     currentTime: LocalDateTime,
     isMyVote: Boolean,
-    onVoteClick: () -> Unit
+    isAdmin: Boolean,
+    onVoteClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     val isClosed = currentTime.isAfter(item.fechaCierre)
     val duration = Duration.between(currentTime, item.fechaCierre)
@@ -517,12 +668,38 @@ private fun VotingCardItem(
         colors = CardDefaults.cardColors(containerColor = CardBgGray)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = item.titulo,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryDarkBlue
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.titulo,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryDarkBlue
+                    )
+                    if (item.descripcion.isNotBlank()) {
+                        Text(
+                            text = item.descripcion,
+                            fontSize = 12.sp,
+                            color = PrimaryDarkBlue.copy(alpha = 0.75f)
+                        )
+                    }
+                }
+
+                if (isAdmin) {
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Eliminar encuesta",
+                            tint = Color(0xFFDC2626)
+                        )
+                    }
+                }
+            }
+
             Text(
                 text = timeRemainingText,
                 fontSize = 12.sp,

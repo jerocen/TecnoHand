@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.mlkit)
     implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.play.services.cloud.messaging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp.logging)
