@@ -4,6 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import com.atom.tecnohandapp.data.models.CreateQrRequest
+import com.atom.tecnohandapp.data.network.RetrofitClient
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -69,12 +74,16 @@ private val WhatsAppGreen = Color(0xFF25D366)
 fun GuestQrGeneratorScreen(
     userProfile: UserProfile,
     lang: AppLanguage = AppLanguage.SPANISH
-) {
+)
+{
     val context = LocalContext.current
     var nombreInvitado by remember { mutableStateOf("") }
     var limiteUsos by remember { mutableIntStateOf(1) }
     var generatedQrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var generatedTokenCode by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    var isCreatingQr by remember { mutableStateOf(false) }
+    var qrError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -83,7 +92,8 @@ fun GuestQrGeneratorScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    )
+    {
         Text(
             text = if (StringsHelper.isEnglish(lang)) "Generate Guest QR Access" else "Crear Código QR para Invitados",
             fontSize = 20.sp,
@@ -101,11 +111,13 @@ fun GuestQrGeneratorScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
+        )
+        {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            )
+            {
                 Text(
                     text = if (StringsHelper.isEnglish(lang)) "Guest Information" else "Datos del Invitado",
                     fontWeight = FontWeight.Bold,
@@ -131,7 +143,8 @@ fun GuestQrGeneratorScreen(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
-                ) {
+                )
+                {
                     listOf(1, 3, 5).forEach { uses ->
                         val isSelected = limiteUsos == uses
                         Surface(
@@ -141,7 +154,8 @@ fun GuestQrGeneratorScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable { limiteUsos = uses }
-                        ) {
+                        )
+                        {
                             Text(
                                 text = if (uses == 1) "1 Uso" else "$uses Usos",
                                 color = if (isSelected) Color.White else ConfirmButtonColor,
@@ -154,44 +168,90 @@ fun GuestQrGeneratorScreen(
                     }
                 }
 
+                if(qrError != null)
+                {
+                    Text(text = qrError!!, color = Color(0xFFEF4444), fontSize = 12.sp)
+                }
+
                 Button(
                     onClick = {
-                        val token = "INV-${(1000..9999).random()}-${nombreInvitado.take(4).uppercase()}"
-                        val payload = "TECNOHAND_QR|$token|${userProfile.vivienda}|$limiteUsos"
-                        generatedTokenCode = token
-                        generatedQrBitmap = generateQrBitmap(payload, 500)
+                        coroutineScope.launch{
+                            isCreatingQr = true
+                            qrError = null
+                            try
+                            {
+                                val cuentaId = userProfile.id.toLongOrNull() ?: 1L
+                                val response = RetrofitClient.getService().crearQrInvitado(
+                                    CreateQrRequest(
+                                        cuenta_id = cuentaId,
+                                        nombre_visitante = nombreInvitado.trim(),
+                                        usos_maximos = limiteUsos,
+                                        duracion_horas = 24
+                                    )
+                                )
+                                if(response.isSuccessful && response.body() != null)
+                                {
+                                    val qrCode = response.body()!!.codigo_qr
+                                    generatedTokenCode = qrCode
+                                    generatedQrBitmap = generateQrBitmap(qrCode, 500)
+                                }
+                                else
+                                {
+                                    qrError = "Error al guardar QR en servidor (${response.code()})"
+                                }
+                            }
+                            catch(e: Exception)
+                            {
+                                qrError = "Error de conexión: ${e.localizedMessage}"
+                            }
+                            finally
+                            {
+                                isCreatingQr = false
+                            }
+                        }
                     },
-                    enabled = nombreInvitado.isNotBlank(),
+                    enabled = !isCreatingQr && nombreInvitado.isNotBlank(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                ) {
-                    Icon(imageVector = Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (StringsHelper.isEnglish(lang)) "Generate QR Code" else "Generar Código QR",
-                        fontWeight = FontWeight.Bold
-                    )
+                )
+                {
+                    if(isCreatingQr)
+                    {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                    else
+                    {
+                        Icon(imageVector = Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (StringsHelper.isEnglish(lang)) "Generate QR Code" else "Generar Código QR",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
 
         // Generated QR Display Card & Share Button
-        if (generatedQrBitmap != null && generatedTokenCode != null) {
+        if(generatedQrBitmap != null && generatedTokenCode != null)
+        {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 border = BorderStroke(2.dp, ConfirmButtonColor)
-            ) {
+            )
+            {
                 Column(
                     modifier = Modifier
                         .padding(20.dp)
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                )
+                {
                     Text(
                         text = "PASE DE ACCESO TECNOHAND",
                         fontWeight = FontWeight.Bold,
@@ -239,7 +299,8 @@ fun GuestQrGeneratorScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen)
-                    ) {
+                    )
+                    {
                         Icon(imageVector = Icons.Default.Share, contentDescription = null, tint = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -255,14 +316,17 @@ fun GuestQrGeneratorScreen(
     }
 }
 
-private fun generateQrBitmap(content: String, size: Int): Bitmap {
+private fun generateQrBitmap(content: String, size: Int): Bitmap
+{
     val writer = QRCodeWriter()
     val bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, size, size)
     val width = bitMatrix.width
     val height = bitMatrix.height
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-    for (x in 0 until width) {
-        for (y in 0 until height) {
+    for(x in 0 until width)
+    {
+        for(y in 0 until height)
+        {
             bmp.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
         }
     }
@@ -275,8 +339,10 @@ private fun shareQrViaWhatsApp(
     invitado: String,
     token: String,
     vivienda: String
-) {
-    try {
+)
+{
+    try
+    {
         val cachePath = File(context.cacheDir, "images")
         cachePath.mkdirs()
         val stream = FileOutputStream("$cachePath/guest_qr.png")
@@ -298,9 +364,12 @@ private fun shareQrViaWhatsApp(
             setPackage("com.whatsapp")
         }
 
-        try {
+        try
+        {
             context.startActivity(shareIntent)
-        } catch (e: Exception) {
+        }
+        catch(e: Exception)
+        {
             // WhatsApp chooser fallback
             val chooser = Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"
@@ -310,7 +379,9 @@ private fun shareQrViaWhatsApp(
             }, "Compartir Pase QR")
             context.startActivity(chooser)
         }
-    } catch (e: Exception) {
+    }
+    catch(e: Exception)
+    {
         e.printStackTrace()
     }
 }

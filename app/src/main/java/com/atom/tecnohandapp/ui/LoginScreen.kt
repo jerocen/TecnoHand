@@ -3,12 +3,17 @@ package com.atom.tecnohandapp.ui
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import android.content.pm.PackageManager
+import androidx.compose.material3.CircularProgressIndicator
 import android.location.Geocoder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import com.atom.tecnohandapp.data.models.ResetPasswordRequest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,7 +127,8 @@ import com.google.android.gms.location.LocationServices
 private val ConfirmButtonColor = Color(0xFF5A82ED)
 private val SubtitleGrayColor = Color(0xFF64748B)
 
-enum class LoginScreenState {
+enum class LoginScreenState
+{
     LANDING,
     LOGIN_FORM,
     REGISTER_FORM
@@ -133,7 +139,8 @@ enum class LoginScreenState {
 fun LoginScreen(
     lang: AppLanguage = AppLanguage.SPANISH,
     onLoginSuccess: (UserProfile) -> Unit = {}
-) {
+)
+{
     var screenState by remember { mutableStateOf(LoginScreenState.LANDING) }
     val context = LocalContext.current
     val userDataStore = remember { UserDataStore(context) }
@@ -172,6 +179,97 @@ fun LoginScreen(
     var loginPasswordInput by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
     var loginErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isSubmittingAuth by remember { mutableStateOf(false) }
+
+    // Estados para recuperar/cambiar contraseña
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var resetEmailInput by remember { mutableStateOf("") }
+    var resetNewPassInput by remember { mutableStateOf("") }
+    var resetConfirmPassInput by remember { mutableStateOf("") }
+    var resetMessage by remember { mutableStateOf<String?>(null) }
+    var isResetError by remember { mutableStateOf(false) }
+    var isResettingPass by remember { mutableStateOf(false) }
+
+    // Función centralizada para registrar (sirve para Guardia en Paso 1 y Residente en Paso 3)
+    val submitRegistration: () -> Unit = {
+        val isGuard = selectedRole == UserRole.GUARD
+        val cleanNombres = nombresInput.trim()
+        val cleanApellidos = apellidosInput.trim()
+        val fullNombre = "$cleanNombres $cleanApellidos".trim()
+        val cleanEmail = emailInput.replace(" ", "")
+        val cleanPassword = passwordInput.replace(" ", "")
+        val houseId = if (isGuard) "" else numeroViviendaInput.trim().ifBlank { "101" }
+        val addressFormatted = if (isGuard) {
+            ""
+        }
+        else if(ubicacionDireccionInput.isNotBlank() && !ubicacionDireccionInput.startsWith("Lat:"))
+        {
+            "$ubicacionDireccionInput (#$houseId)"
+        }
+        else
+        {
+            "Calle Roble #$houseId"
+        }
+
+        val createdProfile = UserProfile(
+            id = if (isGuard) "GRD-001" else "VIV-$houseId",
+            email = cleanEmail,
+            password = cleanPassword,
+            nombres = cleanNombres,
+            apellidos = cleanApellidos,
+            nombre = fullNombre.ifBlank { cleanEmail },
+            telefono = telefonoInput.trim(),
+            fechaNacimiento = fechaNacimientoInput.ifBlank { "01-01-1990" },
+            rol = selectedRole,
+            numeroVivienda = houseId,
+            vivienda = addressFormatted,
+            latitud = if (isGuard) 0.0 else latitudInput,
+            longitud = if (isGuard) 0.0 else longitudInput,
+            ubicacionDireccion = if (isGuard) "" else ubicacionDireccionInput,
+            cantidadResidentes = if (isGuard) 0 else cantidadResidentesCount,
+            colonia = "Colonia Los Pinos",
+            integrantesFamilia = if (isGuard) emptyList() else integrantesFamiliaList.map { it.toFormattedString() }
+        )
+
+        coroutineScope.launch {
+            isSubmittingAuth = true
+            loginErrorMessage = null
+            try
+            {
+                val response = RetrofitClient.getService().register(
+                    RegisterRequest(
+                        nombre = fullNombre.ifBlank { cleanEmail },
+                        telefono = telefonoInput.trim(),
+                        email = cleanEmail,
+                        password = cleanPassword,
+                        rol = selectedRole.name,
+                        direccion = addressFormatted,
+                        referencia = houseId,
+                        colonia = "Colonia Los Pinos"
+                    )
+                )
+                if(response.isSuccessful && response.body() != null)
+                {
+                    val u = response.body()!!
+                    val syncedProfile = createdProfile.copy(id = u.id.toString())
+                    userDataStore.registerUser(syncedProfile)
+                    onLoginSuccess(syncedProfile)
+                }
+                else
+                {
+                    loginErrorMessage = "No se pudo registrar en la BD (${response.code()})"
+                }
+            }
+            catch(e: Exception)
+            {
+                loginErrorMessage = "Error de conexión: ${e.localizedMessage}"
+            }
+            finally
+            {
+                isSubmittingAuth = false
+            }
+        }
+    }
 
     // Secret Developer / Admin Panel State (15-second long press + PIN 3141)
     var showAdminPinDialog by remember { mutableStateOf(false) }
@@ -189,10 +287,12 @@ fun LoginScreen(
     // Location Permission Launcher for Automatic GPS Detection in Step 2
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
+    )
+    { permissions ->
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (granted) {
+        if(granted)
+        {
             isDetectingGps = true
             fetchGpsDeviceLocation(context) { lat, lng, addr ->
                 latitudInput = lat
@@ -204,20 +304,26 @@ fun LoginScreen(
     }
 
     // Auto-detect device location upon entering Step 2
-    LaunchedEffect(onboardingStep) {
-        if (onboardingStep == 2) {
+    LaunchedEffect(onboardingStep)
+    {
+        if(onboardingStep == 2)
+        {
             val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
             val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-            if (fineGranted || coarseGranted) {
+            if(fineGranted || coarseGranted)
+            {
                 isDetectingGps = true
-                fetchGpsDeviceLocation(context) { lat, lng, addr ->
+                fetchGpsDeviceLocation(context)
+                { lat, lng, addr ->
                     latitudInput = lat
                     longitudInput = lng
                     ubicacionDireccionInput = addr
                     isDetectingGps = false
                 }
-            } else {
+            }
+            else
+            {
                 locationPermissionLauncher.launch(
                     arrayOf(
                         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -232,15 +338,20 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
-    ) {
+    )
+    {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
-        ) {
+        )
+        {
             Spacer(modifier = Modifier.height(10.dp))
 
             // App Brand Logo
@@ -250,7 +361,8 @@ fun LoginScreen(
                     .clip(CircleShape)
                     .background(ConfirmButtonColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
-            ) {
+            )
+            {
                 Image(
                     painter = painterResource(id = R.drawable.tecnohand_logo),
                     contentDescription = "TecnoHand Logo",
@@ -276,14 +388,16 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            when (screenState) {
+            when(screenState)
+            {
                 LoginScreenState.LANDING -> {
                     // Central Landing Action Buttons
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    )
+                    {
                         // "Iniciar Sesión" Button with 15-Second Hold Gesture for Secret Admin Panel
                         Box(
                             modifier = Modifier
@@ -291,7 +405,8 @@ fun LoginScreen(
                                 .height(52.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(ConfirmButtonColor)
-                                .pointerInput(Unit) {
+                                .pointerInput(Unit)
+                                {
                                     detectTapGestures(
                                         onTap = {
                                             screenState = LoginScreenState.LOGIN_FORM
@@ -299,11 +414,13 @@ fun LoginScreen(
                                         onPress = {
                                             val startTime = System.currentTimeMillis()
                                             isHoldingLoginButton = true
-                                            val job = coroutineScope.launch {
-                                                while (isHoldingLoginButton) {
+                                            val job = coroutineScope.launch{
+                                                while(isHoldingLoginButton)
+                                                {
                                                     val elapsed = System.currentTimeMillis() - startTime
                                                     holdProgress = (elapsed / 15000f).coerceIn(0f, 1f)
-                                                    if (elapsed >= 15000L) { // 15 Seconds reached!
+                                                    if(elapsed >= 15000L)
+                                                    {
                                                         showAdminPinDialog = true
                                                         isHoldingLoginButton = false
                                                         holdProgress = 0f
@@ -312,9 +429,12 @@ fun LoginScreen(
                                                     delay(100)
                                                 }
                                             }
-                                            try {
+                                            try
+                                            {
                                                 awaitRelease()
-                                            } finally {
+                                            }
+                                            finally
+                                            {
                                                 isHoldingLoginButton = false
                                                 job.cancel()
                                                 holdProgress = 0f
@@ -323,8 +443,10 @@ fun LoginScreen(
                                     )
                                 },
                             contentAlignment = Alignment.Center
-                        ) {
-                            if (isHoldingLoginButton && holdProgress > 0.05f) {
+                        )
+                        {
+                            if(isHoldingLoginButton && holdProgress > 0.05f)
+                            {
                                 LinearProgressIndicator(
                                     progress = { holdProgress },
                                     modifier = Modifier
@@ -336,11 +458,14 @@ fun LoginScreen(
                             }
 
                             Text(
-                                text = if (isHoldingLoginButton && holdProgress > 0.05f) {
+                                text = if (isHoldingLoginButton && holdProgress > 0.05f)
+                                {
                                     val secondsLeft = (15 - (holdProgress * 15)).toInt().coerceAtLeast(1)
                                     "Mantén presionado... (${secondsLeft}s)"
-                                } else {
-                                    if (StringsHelper.isEnglish(lang)) "Log In" else "Iniciar Sesión"
+                                }
+                                else
+                                {
+                                    if(StringsHelper.isEnglish(lang)) "Log In" else "Iniciar Sesión"
                                 },
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
@@ -360,7 +485,8 @@ fun LoginScreen(
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.5.dp, ConfirmButtonColor),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = ConfirmButtonColor)
-                        ) {
+                        )
+                        {
                             Text(
                                 text = if (StringsHelper.isEnglish(lang)) "Register User" else "Registrar Usuario",
                                 fontSize = 16.sp,
@@ -377,7 +503,8 @@ fun LoginScreen(
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.2.dp, Color(0xFFEF4444)),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
-                        ) {
+                        )
+                        {
                             Text(
                                 text = if (StringsHelper.isEnglish(lang)) "Exit App" else "Salir",
                                 fontSize = 15.sp,
@@ -395,13 +522,21 @@ fun LoginScreen(
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
+                    )
+                    {
                         Column(
-                            modifier = Modifier.padding(20.dp),
+                            modifier = Modifier
+                                .padding(20.dp)
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                                .imePadding(),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { screenState = LoginScreenState.LANDING }) {
+                        )
+                        {
+                            Row(verticalAlignment = Alignment.CenterVertically)
+                            {
+                                IconButton(onClick = { screenState = LoginScreenState.LANDING })
+                                {
                                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                                 }
                                 Text(
@@ -414,7 +549,7 @@ fun LoginScreen(
 
                             OutlinedTextField(
                                 value = loginUserInput,
-                                onValueChange = { loginUserInput = it },
+                                onValueChange = { loginUserInput = it.filter { c -> !c.isWhitespace() } },
                                 label = { Text(if (StringsHelper.isEnglish(lang)) "Email or User ID" else "Correo o ID de Usuario") },
                                 placeholder = { Text("ej. residente@tecnohand.com o RES-1001") },
                                 leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = ConfirmButtonColor) },
@@ -425,7 +560,7 @@ fun LoginScreen(
 
                             OutlinedTextField(
                                 value = loginPasswordInput,
-                                onValueChange = { loginPasswordInput = it },
+                                onValueChange = { loginPasswordInput = it.filter { c -> !c.isWhitespace() } },
                                 label = { Text(if (StringsHelper.isEnglish(lang)) "Password" else "Contraseña") },
                                 leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = ConfirmButtonColor) },
                                 trailingIcon = {
@@ -444,7 +579,8 @@ fun LoginScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            if (loginErrorMessage != null) {
+                            if(loginErrorMessage != null)
+                            {
                                 Text(
                                     text = loginErrorMessage!!,
                                     color = Color(0xFFEF4444),
@@ -456,17 +592,21 @@ fun LoginScreen(
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
+                                        isSubmittingAuth = true
                                         loginErrorMessage = null
-                                        try {
+                                        try
+                                        {
                                             val response = RetrofitClient.getService().login(
                                                 LoginRequest(
                                                     email = loginUserInput.trim(),
                                                     password = loginPasswordInput
                                                 )
                                             )
-                                            if (response.isSuccessful && response.body() != null) {
+                                            if(response.isSuccessful && response.body() != null)
+                                            {
                                                 val u = response.body()!!
-                                                val roleEnum = when (u.rol.uppercase()) {
+                                                val roleEnum = when (u.rol.uppercase())
+                                                {
                                                     "GUARD" -> UserRole.GUARD
                                                     "ADMIN" -> UserRole.ADMIN
                                                     else -> UserRole.RESIDENT
@@ -477,14 +617,22 @@ fun LoginScreen(
                                                     password = loginPasswordInput,
                                                     nombre = u.nombre,
                                                     telefono = u.telefono ?: "",
-                                                    rol = roleEnum
+                                                    rol = roleEnum,
+                                                    numeroVivienda = u.referencia ?: "",
+                                                    vivienda = u.direccion ?: "",
+                                                    ubicacionDireccion = u.direccion ?: "",
+                                                    colonia = u.colonia ?: "Colonia Los Pinos"
                                                 )
                                                 userDataStore.registerUser(profile) // guarda sesión local
                                                 onLoginSuccess(profile)
-                                            } else {
+                                            }
+                                            else
+                                            {
                                                 loginErrorMessage = "Credenciales incorrectas (${response.code()})"
                                             }
-                                        } catch (e: Exception) {
+                                        }
+                                        catch(e: Exception)
+                                        {
                                             loginErrorMessage = "Error de conexión con la API: ${e.localizedMessage}"
                                         }
                                     }
@@ -495,12 +643,31 @@ fun LoginScreen(
                                     .height(50.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                            ) {
+                            )
+                            {
                                 Text(
                                     text = if (StringsHelper.isEnglish(lang)) "Enter App" else "Ingresar",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    resetEmailInput = loginUserInput
+                                    resetNewPassInput = ""
+                                    resetConfirmPassInput = ""
+                                    resetMessage = null
+                                    showForgotPasswordDialog = true
+                                },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                            {
+                                Text(
+                                    text = if (StringsHelper.isEnglish(lang)) "Forgot your password?" else "¿Olvidaste tu contraseña?",
+                                    color = ConfirmButtonColor,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
@@ -514,37 +681,47 @@ fun LoginScreen(
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
+                    )
+                    {
                         Column(
                             modifier = Modifier.padding(20.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
+                        )
+                        {
                             // Header with Back Button & Stepper Progress
+                            val totalSteps = if (selectedRole == UserRole.GUARD) 1 else 3
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth()
-                            ) {
+                            )
+                            {
                                 IconButton(
                                     onClick = {
-                                        if (onboardingStep > 1) {
+                                        if(onboardingStep > 1)
+                                        {
                                             onboardingStep--
-                                        } else {
+                                        }
+                                        else
+                                        {
                                             screenState = LoginScreenState.LANDING
                                         }
                                     }
-                                ) {
+                                )
+                                {
                                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                                 }
 
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(modifier = Modifier.weight(1f))
+                                {
                                     Text(
-                                        text = "OnBoarding Registro (${onboardingStep}/3)",
+                                        text = "OnBoarding Registro (${onboardingStep}/$totalSteps)",
                                         fontSize = 18.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = when (onboardingStep) {
+                                        text = when(onboardingStep)
+                                        {
                                             1 -> "Paso 1: Datos Personales y Cuenta"
                                             2 -> "Paso 2: Vivienda y Mapa OSMdroid"
                                             else -> "Paso 3: Núcleo Familiar"
@@ -557,7 +734,7 @@ fun LoginScreen(
 
                             // Stepper Visual Progress Bar
                             LinearProgressIndicator(
-                                progress = { onboardingStep / 3f },
+                                progress = { onboardingStep / totalSteps.toFloat() },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(6.dp)
@@ -570,16 +747,21 @@ fun LoginScreen(
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceAround
-                            ) {
+                            )
+                            {
                                 StepChip(stepNumber = 1, title = "Datos", active = onboardingStep >= 1)
-                                StepChip(stepNumber = 2, title = "Vivienda", active = onboardingStep >= 2)
-                                StepChip(stepNumber = 3, title = "Familia", active = onboardingStep >= 3)
+                                if(selectedRole != UserRole.GUARD)
+                                {
+                                    StepChip(stepNumber = 2, title = "Vivienda", active = onboardingStep >= 2)
+                                    StepChip(stepNumber = 3, title = "Familia", active = onboardingStep >= 3)
+                                }
                             }
 
                             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
 
                             // --- STEP 1: DATOS SENCILLOS ---
-                            if (onboardingStep == 1) {
+                            if(onboardingStep == 1)
+                            {
                                 Text(
                                     text = "Ingresa tus datos principales:",
                                     fontSize = 14.sp,
@@ -591,14 +773,16 @@ fun LoginScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
+                                )
+                                {
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = if (selectedRole == UserRole.RESIDENT) ConfirmButtonColor else MaterialTheme.colorScheme.surface,
                                         modifier = Modifier
                                             .weight(1f)
                                             .clickable { selectedRole = UserRole.RESIDENT }
-                                    ) {
+                                    )
+                                    {
                                         Text(
                                             text = "Residente 🏠",
                                             color = if (selectedRole == UserRole.RESIDENT) Color.White else SubtitleGrayColor,
@@ -615,7 +799,8 @@ fun LoginScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clickable { selectedRole = UserRole.GUARD }
-                                    ) {
+                                    )
+                                    {
                                         Text(
                                             text = "Guardia 🛡️",
                                             color = if (selectedRole == UserRole.GUARD) Color.White else SubtitleGrayColor,
@@ -629,7 +814,7 @@ fun LoginScreen(
 
                                 OutlinedTextField(
                                     value = nombresInput,
-                                    onValueChange = { nombresInput = it },
+                                    onValueChange = { nombresInput = it.filter { c -> c.isLetter() || c == ' ' }.trimStart() },
                                     label = { Text("Nombres") },
                                     leadingIcon = { Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = ConfirmButtonColor) },
                                     singleLine = true,
@@ -639,30 +824,47 @@ fun LoginScreen(
 
                                 OutlinedTextField(
                                     value = apellidosInput,
-                                    onValueChange = { apellidosInput = it },
+                                    onValueChange = { apellidosInput = it.filter { c -> c.isLetter() || c == ' ' }.trimStart() },
                                     label = { Text("Apellidos") },
                                     leadingIcon = { Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = ConfirmButtonColor) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
                                 )
+                                val isPhoneValid = telefonoInput.length == 10
 
                                 OutlinedTextField(
                                     value = telefonoInput,
-                                    onValueChange = { telefonoInput = it },
-                                    label = { Text("Número de Teléfono") },
-                                    placeholder = { Text("+52 55 1234 5678") },
+                                    onValueChange = { telefonoInput = it.filter { c -> c.isDigit() }.take(10) },
+                                    label = { Text("Número de Teléfono (10 dígitos)") },
+                                    placeholder = { Text("8711234567") },
+                                    isError = telefonoInput.isNotEmpty() && !isPhoneValid,
+                                    supportingText = {
+                                        if(telefonoInput.isNotEmpty() && !isPhoneValid)
+                                        {
+                                            Text("Debe tener exactamente 10 dígitos (${telefonoInput.length}/10)")
+                                        }
+                                    },
                                     leadingIcon = { Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = ConfirmButtonColor) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
                                 )
 
+                                val isEmailValid = android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches()
+
                                 OutlinedTextField(
                                     value = emailInput,
-                                    onValueChange = { emailInput = it },
+                                    onValueChange = { emailInput = it.filter { c -> !c.isWhitespace() } },
                                     label = { Text("E-mail (Correo Electrónico)") },
+                                    isError = emailInput.isNotEmpty() && !isEmailValid,
+                                    supportingText = {
+                                        if(emailInput.isNotEmpty() && !isEmailValid)
+                                        {
+                                            Text("Ingresa un correo válido (ej. usuario@correo.com)")
+                                        }
+                                    },
                                     leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = ConfirmButtonColor) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                                     singleLine = true,
@@ -672,11 +874,12 @@ fun LoginScreen(
 
                                 OutlinedTextField(
                                     value = passwordInput,
-                                    onValueChange = { passwordInput = it },
+                                    onValueChange = { passwordInput = it.filter { c -> !c.isWhitespace() } },
                                     label = { Text("Contraseña") },
                                     leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = ConfirmButtonColor) },
                                     trailingIcon = {
-                                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        IconButton(onClick = { passwordVisible = !passwordVisible })
+                                        {
                                             Icon(
                                                 imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                                 contentDescription = "Mostrar contraseña",
@@ -708,21 +911,59 @@ fun LoginScreen(
                                     shape = RoundedCornerShape(12.dp)
                                 )
 
+                                if(loginErrorMessage != null)
+                                {
+                                    Text(text = loginErrorMessage!!, color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                val step1Valid = nombresInput.isNotBlank() &&
+                                        apellidosInput.isNotBlank() &&
+                                        isPhoneValid &&
+                                        isEmailValid &&
+                                        emailInput.isNotBlank() &&
+                                        passwordInput.isNotBlank() &&
+                                        passwordInput.length >= 4
+
                                 Button(
-                                    onClick = { onboardingStep = 2 },
-                                    enabled = nombresInput.isNotBlank() && apellidosInput.isNotBlank() && emailInput.isNotBlank() && passwordInput.isNotBlank(),
+                                    onClick = {
+                                        if(selectedRole == UserRole.GUARD)
+                                        {
+                                            submitRegistration()
+                                        }
+                                        else
+                                        {
+                                            onboardingStep = 2
+                                        }
+                                    },
+                                    enabled = step1Valid && !isSubmittingAuth,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(50.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                                ) {
-                                    Text("Siguiente: Vivienda y Ubicación ➔", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if(selectedRole == UserRole.GUARD) Color(0xFF10B981) else ConfirmButtonColor
+                                    )
+                                )
+                                {
+                                    if(isSubmittingAuth && selectedRole == UserRole.GUARD)
+                                    {
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                    }
+                                    else
+                                    {
+                                        Text(
+                                            text = if (selectedRole == UserRole.GUARD) "Completar Registro de Guardia" else "Siguiente: Vivienda y Ubicación ➔",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
                                 }
                             }
 
                             // --- STEP 2: APARTADOS DE LA VIVIENDA ---
-                            if (onboardingStep == 2) {
+                            if(onboardingStep == 2)
+                            {
                                 Text(
                                     text = "Configura los datos de tu vivienda:",
                                     fontSize = 14.sp,
@@ -754,7 +995,8 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                )
+                                {
                                     Text(
                                         text = "Ubicación Vivienda (OSMDroid):",
                                         fontSize = 13.sp,
@@ -767,7 +1009,8 @@ fun LoginScreen(
                                             val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                                             val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-                                            if (fineGranted || coarseGranted) {
+                                            if(fineGranted || coarseGranted)
+                                            {
                                                 isDetectingGps = true
                                                 fetchGpsDeviceLocation(context) { lat, lng, addr ->
                                                     latitudInput = lat
@@ -775,7 +1018,9 @@ fun LoginScreen(
                                                     ubicacionDireccionInput = addr
                                                     isDetectingGps = false
                                                 }
-                                            } else {
+                                            }
+                                            else
+                                            {
                                                 locationPermissionLauncher.launch(
                                                     arrayOf(
                                                         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -784,7 +1029,8 @@ fun LoginScreen(
                                                 )
                                             }
                                         }
-                                    ) {
+                                    )
+                                    {
                                         Icon(imageVector = Icons.Default.MyLocation, contentDescription = null, tint = ConfirmButtonColor, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
@@ -811,7 +1057,8 @@ fun LoginScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
+                                )
+                                {
                                     PresetChip("Caseta Main", 19.432608, -99.133209) { lat, lng ->
                                         latitudInput = lat; longitudInput = lng; ubicacionDireccionInput = "Caseta Principal, Av. Los Pinos 100"
                                     }
@@ -837,20 +1084,24 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                )
+                                {
+                                    Row(verticalAlignment = Alignment.CenterVertically)
+                                    {
                                         Icon(imageVector = Icons.Default.People, contentDescription = null, tint = ConfirmButtonColor)
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(text = "Cantidad de Residentes:", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                     }
 
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically)
+                                    {
                                         Button(
                                             onClick = { if (cantidadResidentesCount > 1) cantidadResidentesCount-- },
                                             shape = CircleShape,
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
                                             modifier = Modifier.size(36.dp)
-                                        ) {
+                                        )
+                                        {
                                             Text("-", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                                         }
                                         Text(
@@ -863,7 +1114,8 @@ fun LoginScreen(
                                             shape = CircleShape,
                                             colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor),
                                             modifier = Modifier.size(36.dp)
-                                        ) {
+                                        )
+                                        {
                                             Text("+", color = Color.White, fontWeight = FontWeight.Bold)
                                         }
                                     }
@@ -872,14 +1124,16 @@ fun LoginScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
+                                )
+                                {
                                     OutlinedButton(
                                         onClick = { onboardingStep = 1 },
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(50.dp),
                                         shape = RoundedCornerShape(12.dp)
-                                    ) {
+                                    )
+                                    {
                                         Text("⬅ Anterior")
                                     }
 
@@ -891,14 +1145,16 @@ fun LoginScreen(
                                             .height(50.dp),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                                    ) {
+                                    )
+                                    {
                                         Text("Siguiente: Familia ➔", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                     }
                                 }
                             }
 
                             // --- STEP 3: APARTADO DE FAMILIA ---
-                            if (onboardingStep == 3) {
+                            if(onboardingStep == 3)
+                            {
                                 Text(
                                     text = "Apartado de Familia (Integrantes):",
                                     fontSize = 14.sp,
@@ -915,7 +1171,8 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                )
+                                {
                                     OutlinedTextField(
                                         value = nuevoFamiliarNombre,
                                         onValueChange = { nuevoFamiliarNombre = it },
@@ -929,7 +1186,8 @@ fun LoginScreen(
                                         expanded = parentescoExpanded,
                                         onExpandedChange = { parentescoExpanded = !parentescoExpanded },
                                         modifier = Modifier.weight(1f)
-                                    ) {
+                                    )
+                                    {
                                         OutlinedTextField(
                                             value = nuevoFamiliarParentesco,
                                             onValueChange = {},
@@ -941,7 +1199,8 @@ fun LoginScreen(
                                         ExposedDropdownMenu(
                                             expanded = parentescoExpanded,
                                             onDismissRequest = { parentescoExpanded = false }
-                                        ) {
+                                        )
+                                        {
                                             parentescoOptions.forEach { option ->
                                                 DropdownMenuItem(
                                                     text = { Text(option) },
@@ -956,7 +1215,8 @@ fun LoginScreen(
 
                                     Button(
                                         onClick = {
-                                            if (nuevoFamiliarNombre.isNotBlank()) {
+                                            if(nuevoFamiliarNombre.isNotBlank())
+                                            {
                                                 integrantesFamiliaList.add(
                                                     FamiliaMember(
                                                         nombre = nuevoFamiliarNombre.trim(),
@@ -969,7 +1229,8 @@ fun LoginScreen(
                                         enabled = nuevoFamiliarNombre.isNotBlank(),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                                    ) {
+                                    )
+                                    {
                                         Icon(imageVector = Icons.Default.Add, contentDescription = "Agregar")
                                     }
                                 }
@@ -979,12 +1240,15 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     color = MaterialTheme.colorScheme.surface
-                                ) {
+                                )
+                                {
                                     Column(
                                         modifier = Modifier.padding(12.dp),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        if (integrantesFamiliaList.isEmpty()) {
+                                    )
+                                    {
+                                        if(integrantesFamiliaList.isEmpty())
+                                        {
                                             Text(
                                                 text = "No has agregado familiares aún. Puedes omitir o agregar después.",
                                                 fontSize = 12.sp,
@@ -992,14 +1256,18 @@ fun LoginScreen(
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
-                                        } else {
+                                        }
+                                        else
+                                        {
                                             integrantesFamiliaList.forEachIndexed { index, member ->
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                )
+                                                {
+                                                    Row(verticalAlignment = Alignment.CenterVertically)
+                                                    {
                                                         Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = ConfirmButtonColor, modifier = Modifier.size(18.dp))
                                                         Spacer(modifier = Modifier.width(6.dp))
                                                         Text(
@@ -1023,83 +1291,42 @@ fun LoginScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
+                                )
+                                {
                                     OutlinedButton(
                                         onClick = { onboardingStep = 2 },
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(50.dp),
                                         shape = RoundedCornerShape(12.dp)
-                                    ) {
+                                    )
+                                    {
                                         Text("⬅ Anterior")
                                     }
 
                                     // Complete Registration Button -> Saves to DataStore!
                                     Button(
                                         onClick = {
-                                            val fullNombre = "$nombresInput $apellidosInput".trim()
-                                            val houseId = if (numeroViviendaInput.isNotBlank()) numeroViviendaInput.trim() else "101"
-                                            val addressFormatted = if (ubicacionDireccionInput.isNotBlank() && !ubicacionDireccionInput.startsWith("Lat:")) {
-                                                "$ubicacionDireccionInput (#$houseId)"
-                                            } else {
-                                                "Calle Roble #$houseId"
-                                            }
-
-                                            val createdProfile = UserProfile(
-                                                id = "VIV-$houseId",
-                                                email = emailInput.trim(),
-                                                password = passwordInput,
-                                                nombres = nombresInput.trim(),
-                                                apellidos = apellidosInput.trim(),
-                                                nombre = if (fullNombre.isNotBlank()) fullNombre else emailInput,
-                                                telefono = telefonoInput.trim(),
-                                                fechaNacimiento = if (fechaNacimientoInput.isNotBlank()) fechaNacimientoInput else "01-01-1990",
-                                                rol = selectedRole,
-                                                numeroVivienda = houseId,
-                                                vivienda = addressFormatted,
-                                                latitud = latitudInput,
-                                                longitud = longitudInput,
-                                                ubicacionDireccion = ubicacionDireccionInput,
-                                                cantidadResidentes = cantidadResidentesCount,
-                                                colonia = "Colonia Los Pinos",
-                                                integrantesFamilia = integrantesFamiliaList.map { it.toFormattedString() }
-                                            )
-
-                                            coroutineScope.launch {
-                                                try {
-                                                    val response = RetrofitClient.getService().register(
-                                                        RegisterRequest(
-                                                            nombre = if (fullNombre.isNotBlank()) fullNombre else emailInput.trim(),
-                                                            telefono = telefonoInput.trim(),
-                                                            email = emailInput.trim(),
-                                                            password = passwordInput,
-                                                            rol = selectedRole.name
-                                                        )
-                                                    )
-                                                    if (response.isSuccessful && response.body() != null) {
-                                                        val u = response.body()!!
-                                                        val syncedProfile = createdProfile.copy(id = u.id.toString())
-                                                        userDataStore.registerUser(syncedProfile)
-                                                        onLoginSuccess(syncedProfile)
-                                                    } else {
-                                                        loginErrorMessage = "No se pudo registrar en la BD (${response.code()})"
-                                                    }
-                                                } catch (e: Exception) {
-                                                    // Si no hay conexión, guarda al menos en DataStore como respaldo
-                                                    userDataStore.registerUser(createdProfile)
-                                                    onLoginSuccess(createdProfile)
-                                                }
-                                            }
+                                            submitRegistration()
                                         },
+                                        enabled = !isSubmittingAuth,
                                         modifier = Modifier
                                             .weight(1.4f)
                                             .height(50.dp),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                                    ) {
-                                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.White)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Completar Registro", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    )
+                                    {
+                                        if(isSubmittingAuth)
+                                        {
+                                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                        }
+                                        else
+                                        {
+                                            Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.White)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Completar Registro", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
                                     }
                                 }
                             }
@@ -1110,8 +1337,155 @@ fun LoginScreen(
         }
     }
 
+    // --- DIÁLOGO DE CAMBIO DE CONTRASEÑA ---
+    if(showForgotPasswordDialog)
+    {
+        AlertDialog(
+            onDismissRequest = { if (!isResettingPass) showForgotPasswordDialog = false },
+            title = {
+                Text(
+                    text = if (StringsHelper.isEnglish(lang)) "Reset Password" else "Cambiar Contraseña",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp))
+                {
+                    Text(
+                        text = "Ingresa tu correo registrado y tu nueva contraseña (sin espacios):",
+                        fontSize = 12.sp,
+                        color = SubtitleGrayColor
+                    )
+
+                    OutlinedTextField(
+                        value = resetEmailInput,
+                        onValueChange = { resetEmailInput = it.filter { c -> !c.isWhitespace() } },
+                        label = { Text("Correo electrónico") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = resetNewPassInput,
+                        onValueChange = { resetNewPassInput = it.filter { c -> !c.isWhitespace() } },
+                        label = { Text("Nueva contraseña") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = resetConfirmPassInput,
+                        onValueChange = { resetConfirmPassInput = it.filter { c -> !c.isWhitespace() } },
+                        label = { Text("Confirmar contraseña") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if(resetMessage != null)
+                    {
+                        Text(
+                            text = resetMessage!!,
+                            color = if (isResetError) Color(0xFFEF4444) else Color(0xFF10B981),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if(resetNewPassInput != resetConfirmPassInput)
+                        {
+                            isResetError = true
+                            resetMessage = "Las contraseñas no coinciden."
+                            return@Button
+                        }
+                        if(resetNewPassInput.length < 4)
+                        {
+                            isResetError = true
+                            resetMessage = "La contraseña debe tener al menos 4 caracteres."
+                            return@Button
+                        }
+                        coroutineScope.launch{
+                            isResettingPass = true
+                            resetMessage = null
+                            try
+                            {
+                                val res = RetrofitClient.getService().resetPassword(
+                                    ResetPasswordRequest(
+                                        email = resetEmailInput.trim(),
+                                        newPassword = resetNewPassInput
+                                    )
+                                )
+                                if(res.isSuccessful)
+                                {
+                                    isResetError = false
+                                    resetMessage = "¡Contraseña actualizada! Ya puedes iniciar sesión."
+                                    delay(1200)
+                                    showForgotPasswordDialog = false
+                                }
+                                else
+                                {
+                                    isResetError = true
+                                    resetMessage = if (res.code() == 404) {
+                                        "No se encontró ninguna cuenta con ese correo."
+                                    }
+                                    else
+                                    {
+                                        "Error al actualizar (${res.code()})."
+                                    }
+                                }
+                            }
+                            catch(e: Exception)
+                            {
+                                isResetError = true
+                                resetMessage = "Error de conexión: ${e.localizedMessage}"
+                            }
+                            finally
+                            {
+                                isResettingPass = false
+                            }
+                        }
+                    },
+                    enabled = !isResettingPass && resetEmailInput.isNotBlank() && resetNewPassInput.isNotBlank() && resetConfirmPassInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
+                )
+                {
+                    if(isResettingPass)
+                    {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                    else
+                    {
+                        Text("Guardar", color = Color.White)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showForgotPasswordDialog = false },
+                    enabled = !isResettingPass
+                )
+                {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     // --- DATE PICKER DIALOG ---
-    if (showDatePickerDialog) {
+    if(showDatePickerDialog)
+    {
         val datePickerState = rememberDatePickerState()
         DatePickerDialog(
             onDismissRequest = { showDatePickerDialog = false },
@@ -1125,22 +1499,26 @@ fun LoginScreen(
                         }
                         showDatePickerDialog = false
                     }
-                ) {
+                )
+                {
                     Text("Aceptar", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePickerDialog = false }) {
+                TextButton(onClick = { showDatePickerDialog = false })
+                {
                     Text("Cancelar")
                 }
             }
-        ) {
+        )
+        {
             DatePicker(state = datePickerState)
         }
     }
 
     // --- SECRET ADMIN PIN DIALOG (Triggered by 15-second long press on "Iniciar Sesión") ---
-    if (showAdminPinDialog) {
+    if(showAdminPinDialog)
+    {
         AlertDialog(
             onDismissRequest = {
                 showAdminPinDialog = false
@@ -1155,7 +1533,8 @@ fun LoginScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp))
+                {
                     Text(
                         text = "Ingrese el PIN de 4 dígitos para acceder al panel de administración y pruebas:",
                         fontSize = 13.sp,
@@ -1165,7 +1544,8 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = adminPinInput,
                         onValueChange = {
-                            if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                            if(it.length <= 4 && it.all { char -> char.isDigit() })
+                            {
                                 adminPinInput = it
                                 adminPinError = false
                             }
@@ -1179,7 +1559,8 @@ fun LoginScreen(
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    if (adminPinError) {
+                    if(adminPinError)
+                    {
                         Text(
                             text = "❌ PIN incorrecto. Intente nuevamente.",
                             color = Color(0xFFEF4444),
@@ -1192,17 +1573,21 @@ fun LoginScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (adminPinInput == "3141") {
+                        if(adminPinInput == "3141")
+                        {
                             showAdminPinDialog = false
                             adminPinInput = ""
                             adminPinError = false
                             showAdminDeveloperPanel = true
-                        } else {
+                        }
+                        else
+                        {
                             adminPinError = true
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                ) {
+                )
+                {
                     Text("Ingresar")
                 }
             },
@@ -1213,7 +1598,8 @@ fun LoginScreen(
                         adminPinInput = ""
                         adminPinError = false
                     }
-                ) {
+                )
+                {
                     Text("Cancelar")
                 }
             }
@@ -1221,8 +1607,8 @@ fun LoginScreen(
     }
 
     // --- SECRET ADMIN DEVELOPER PANEL DIALOG (Admin 1: Residente, Admin 2: Guardia) ---
-    // --- SECRET ADMIN DEVELOPER PANEL DIALOG ---
-    if (showAdminDeveloperPanel) {
+    if(showAdminDeveloperPanel)
+    {
         AlertDialog(
             onDismissRequest = { showAdminDeveloperPanel = false },
             title = {
@@ -1236,7 +1622,8 @@ fun LoginScreen(
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                )
+                {
                     Text(
                         text = "Selecciona un acceso directo por rol para pruebas:",
                         fontSize = 13.sp,
@@ -1246,9 +1633,10 @@ fun LoginScreen(
                     // Admin 1 (Resident Preset)
                     Button(
                         onClick = {
-                            coroutineScope.launch {
+                            coroutineScope.launch{
                                 val user = userDataStore.authenticateUser("residente@tecnohand.com", "123456")
-                                if (user != null) {
+                                if(user != null)
+                                {
                                     showAdminDeveloperPanel = false
                                     onLoginSuccess(user)
                                 }
@@ -1259,16 +1647,18 @@ fun LoginScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
-                    ) {
+                    )
+                    {
                         Text("Admin 1: Iniciar como Residente 🏠", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
 
                     // Admin 2 (Guard Preset)
                     Button(
                         onClick = {
-                            coroutineScope.launch {
+                            coroutineScope.launch{
                                 val user = userDataStore.authenticateUser("guardia@tecnohand.com", "123456")
-                                if (user != null) {
+                                if(user != null)
+                                {
                                     showAdminDeveloperPanel = false
                                     onLoginSuccess(user)
                                 }
@@ -1279,14 +1669,15 @@ fun LoginScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                    ) {
+                    )
+                    {
                         Text("Admin 2: Iniciar como Guardia 🛡️", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
 
                     // Admin 3 (Administrador Preset)
                     Button(
                         onClick = {
-                            coroutineScope.launch {
+                            coroutineScope.launch{
                                 val adminUser = UserProfile(
                                     id = "ADM-001",
                                     email = "admin@tecnohand.com",
@@ -1305,13 +1696,15 @@ fun LoginScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF060060))
-                    ) {
+                    )
+                    {
                         Text("Admin 3: Iniciar como Administrador 👑", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showAdminDeveloperPanel = false }) {
+                TextButton(onClick = { showAdminDeveloperPanel = false })
+                {
                     Text("Cerrar")
                 }
             }
@@ -1322,56 +1715,70 @@ fun LoginScreen(
 private fun fetchGpsDeviceLocation(
     context: Context,
     onLocationRetrieved: (Double, Double, String) -> Unit
-) {
-    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+)
+{
+    if(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-    ) {
+    )
+    {
         return
     }
 
-    try {
+    try
+    {
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null) {
+            if(location != null)
+            {
                 val lat = location.latitude
                 val lng = location.longitude
                 var addressText = "Lat: %.4f, Lng: %.4f".format(lat, lng)
 
-                try {
+                try
+                {
                     val geocoder = Geocoder(context, Locale.getDefault())
                     @Suppress("DEPRECATION")
                     val addresses = geocoder.getFromLocation(lat, lng, 1)
-                    if (!addresses.isNullOrEmpty()) {
+                    if(!addresses.isNullOrEmpty())
+                    {
                         val addr = addresses[0]
                         val thoroughfare = addr.thoroughfare ?: ""
                         val locality = addr.subLocality ?: addr.locality ?: ""
                         val formatted = "$thoroughfare, $locality".trim(',', ' ')
-                        if (formatted.isNotBlank()) {
+                        if(formatted.isNotBlank())
+                        {
                             addressText = formatted
                         }
                     }
-                } catch (e: Exception) {
+                }
+                catch(e: Exception)
+                {
                     // Fallback to coordinates format
                 }
 
                 onLocationRetrieved(lat, lng, addressText)
             }
         }
-    } catch (e: Exception) {
+    }
+    catch(e: Exception)
+    {
         // Exception fallback
     }
 }
 
 @Composable
-private fun StepChip(stepNumber: Int, title: String, active: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun StepChip(stepNumber: Int, title: String, active: Boolean)
+{
+    Row(verticalAlignment = Alignment.CenterVertically)
+    {
         Box(
             modifier = Modifier
                 .size(24.dp)
                 .clip(CircleShape)
                 .background(if (active) ConfirmButtonColor else Color.LightGray.copy(alpha = 0.5f)),
             contentAlignment = Alignment.Center
-        ) {
+        )
+        {
             Text(
                 text = "$stepNumber",
                 color = Color.White,
@@ -1390,12 +1797,14 @@ private fun StepChip(stepNumber: Int, title: String, active: Boolean) {
 }
 
 @Composable
-private fun PresetChip(label: String, lat: Double, lng: Double, onClick: (Double, Double) -> Unit) {
+private fun PresetChip(label: String, lat: Double, lng: Double, onClick: (Double, Double) -> Unit)
+{
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = ConfirmButtonColor.copy(alpha = 0.12f),
         modifier = Modifier.clickable { onClick(lat, lng) }
-    ) {
+    )
+    {
         Text(
             text = label,
             fontSize = 10.sp,
@@ -1411,10 +1820,12 @@ private fun OsmRegistrationMap(
     latitude: Double,
     longitude: Double,
     onLocationChanged: (Double, Double) -> Unit
-) {
+)
+{
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit)
+    {
         Configuration.getInstance().userAgentValue = context.packageName
         Configuration.getInstance().load(context, context.getSharedPreferences("osmdroid_reg", Context.MODE_PRIVATE))
     }
@@ -1425,25 +1836,29 @@ private fun OsmRegistrationMap(
             .height(170.dp)
             .clip(RoundedCornerShape(14.dp))
             .border(1.dp, Color.LightGray, RoundedCornerShape(14.dp))
-    ) {
+    )
+    {
         AndroidView(
             factory = { ctx ->
-                MapView(ctx).apply {
+                MapView(ctx).apply{
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     controller.setZoom(16.0)
                     controller.setCenter(GeoPoint(latitude, longitude))
 
-                    val marker = Marker(this).apply {
+                    val marker = Marker(this).apply{
                         position = GeoPoint(latitude, longitude)
                         title = "Ubicación Vivienda"
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                     }
                     overlays.add(marker)
 
-                    val mapEventsReceiver = object : MapEventsReceiver {
-                        override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
-                            if (p != null) {
+                    val mapEventsReceiver = object : MapEventsReceiver
+                    {
+                        override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean
+                        {
+                            if(p != null)
+                            {
                                 onLocationChanged(p.latitude, p.longitude)
                             }
                             return true
@@ -1456,7 +1871,7 @@ private fun OsmRegistrationMap(
             },
             update = { mapView ->
                 mapView.controller.setCenter(GeoPoint(latitude, longitude))
-                mapView.overlays.filterIsInstance<Marker>().firstOrNull()?.apply {
+                mapView.overlays.filterIsInstance<Marker>().firstOrNull()?.apply{
                     position = GeoPoint(latitude, longitude)
                 }
                 mapView.invalidate()

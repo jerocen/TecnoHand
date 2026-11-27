@@ -52,7 +52,6 @@ import com.atom.tecnohandapp.data.models.AlertItem
 import com.atom.tecnohandapp.data.models.AppLanguage
 
 private val SubtitleGrayColor = Color(0xFF64748B)
-
 private val AlertRed = Color(0xFFEF4444)
 private val AlertYellow = Color(0xFFF59E0B)
 private val AlertGreen = Color(0xFF10B981)
@@ -60,7 +59,9 @@ private val AlertGreen = Color(0xFF10B981)
 @Composable
 fun AlertsNotificationsScreen(
     viewModel: AlertsViewModel = viewModel(),
-    lang: AppLanguage = AppLanguage.SPANISH
+    lang: AppLanguage = AppLanguage.SPANISH,
+    canResolve: Boolean = false,
+    currentUserId: Long = 1L
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val filterOptions = listOf(
@@ -69,6 +70,23 @@ fun AlertsNotificationsScreen(
         StringsHelper.tabInProgress(lang),
         StringsHelper.tabCompleted(lang)
     )
+
+    // Filtro exacto para asegurar que "Terminado" solo muestre alertas terminadas
+    val displayedAlerts = when (uiState.selectedFilter) {
+        StringsHelper.tabCritical(lang), "Críticas", "Critical" ->
+            uiState.filteredAlerts.filter { it.colorNivel.equals("rojo", ignoreCase = true) }
+        StringsHelper.tabInProgress(lang), "En Proceso", "In Progress" ->
+            uiState.filteredAlerts.filter {
+                it.estadoUi.equals("En Proceso", ignoreCase = true) ||
+                        it.colorNivel.equals("amarillo", ignoreCase = true)
+            }
+        StringsHelper.tabCompleted(lang), "Terminado", "Terminadas", "Completed" ->
+            uiState.filteredAlerts.filter {
+                it.estadoUi.equals("Terminado", ignoreCase = true) ||
+                        it.estadoUi.equals("Resuelto", ignoreCase = true)
+            }
+        else -> uiState.filteredAlerts
+    }
 
     Column(
         modifier = Modifier
@@ -147,11 +165,16 @@ fun AlertsNotificationsScreen(
                 }
 
                 Button(
-                    onClick = { viewModel.triggerPanicButton() },
+                    onClick = { viewModel.triggerPanicButton(currentUserId) },
                     colors = ButtonDefaults.buttonColors(containerColor = AlertRed),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(StringsHelper.panicBtnText(lang), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                    Text(
+                        StringsHelper.panicBtnText(lang),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = Color.White
+                    )
                 }
             }
         }
@@ -168,7 +191,7 @@ fun AlertsNotificationsScreen(
                 val chipColor = when {
                     filter == StringsHelper.tabCritical(lang) || filter == "Críticas" -> AlertRed
                     filter == StringsHelper.tabInProgress(lang) || filter == "En Proceso" -> AlertYellow
-                    filter == StringsHelper.tabCompleted(lang) || filter == "Terminadas" -> AlertGreen
+                    filter == StringsHelper.tabCompleted(lang) || filter == "Terminadas" || filter == "Terminado" -> AlertGreen
                     else -> Color(0xFF5A82ED)
                 }
 
@@ -200,7 +223,7 @@ fun AlertsNotificationsScreen(
             ) {
                 CircularProgressIndicator(color = AlertRed)
             }
-        } else if (uiState.filteredAlerts.isEmpty()) {
+        } else if (displayedAlerts.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -221,10 +244,11 @@ fun AlertsNotificationsScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                items(uiState.filteredAlerts) { alert ->
+                items(displayedAlerts) { alert ->
                     AlertNotificationCard(
                         alert = alert,
                         lang = lang,
+                        canResolve = canResolve,
                         onResolve = { viewModel.markAlertAsResolved(alert.id) }
                     )
                 }
@@ -269,6 +293,7 @@ fun AlertsNotificationsScreen(
 private fun AlertNotificationCard(
     alert: AlertItem,
     lang: AppLanguage,
+    canResolve: Boolean,
     onResolve: () -> Unit
 ) {
     val (statusColor, icon) = when (alert.colorNivel) {
@@ -290,6 +315,24 @@ private fun AlertNotificationCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val priorityColor = when (alert.prioridad.lowercase()) {
+                        "urgente", "alta" -> AlertRed
+                        "media" -> AlertYellow
+                        else -> AlertGreen
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = priorityColor.copy(alpha = 0.14f)
+                    ) {
+                        Text(
+                            text = "Prioridad: ${alert.prioridad.uppercase()}",
+                            color = priorityColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
@@ -351,13 +394,18 @@ private fun AlertNotificationCard(
                     color = SubtitleGrayColor
                 )
 
-                if (alert.estadoUi != "Terminado") {
+                if (canResolve && !alert.estadoUi.equals("Terminado", ignoreCase = true)) {
                     OutlinedButton(
                         onClick = onResolve,
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(1.dp, AlertGreen)
                     ) {
-                        Text(StringsHelper.resolveBtn(lang), fontSize = 11.sp, color = AlertGreen, fontWeight = FontWeight.Bold)
+                        Text(
+                            StringsHelper.resolveBtn(lang),
+                            fontSize = 11.sp,
+                            color = AlertGreen,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

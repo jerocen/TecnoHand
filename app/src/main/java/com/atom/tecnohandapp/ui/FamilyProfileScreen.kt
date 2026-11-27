@@ -10,14 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
-import com.atom.tecnohandapp.data.models.AdminUserItem
-import com.atom.tecnohandapp.data.models.UserRole
-import com.atom.tecnohandapp.data.network.RetrofitClient
-import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -25,17 +17,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -48,11 +41,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,8 +57,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.atom.tecnohandapp.data.local.StringsHelper
+import com.atom.tecnohandapp.data.models.AdminUserItem
 import com.atom.tecnohandapp.data.models.AppLanguage
 import com.atom.tecnohandapp.data.models.UserProfile
+import com.atom.tecnohandapp.data.models.UserRole
+import com.atom.tecnohandapp.data.network.RetrofitClient
+import kotlinx.coroutines.launch
 
 private val ConfirmButtonColor = Color(0xFF5A82ED)
 private val SubtitleGrayColor = Color(0xFF64748B)
@@ -75,10 +74,13 @@ fun FamilyProfileScreen(
     lang: AppLanguage = AppLanguage.SPANISH,
     onUpdateProfile: (UserProfile) -> Unit = {},
     onLogout: () -> Unit = {}
-) {
+)
+{
     var viviendaText by remember { mutableStateOf(userProfile.vivienda.ifBlank { userProfile.ubicacionDireccion }) }
     var numeroViviendaText by remember { mutableStateOf(userProfile.numeroVivienda) }
     var telefonoText by remember { mutableStateOf(userProfile.telefono) }
+    var nombreText by remember { mutableStateOf(userProfile.nombre) }
+    var emailText by remember { mutableStateOf(userProfile.email) }
     var cantidadResidentes by remember { mutableIntStateOf(userProfile.cantidadResidentes) }
 
     var nuevoNombreFamiliar by remember { mutableStateOf("") }
@@ -89,32 +91,44 @@ fun FamilyProfileScreen(
     var saveSuccessMessage by remember { mutableStateOf(false) }
 
     val isAdmin = userProfile.rol == UserRole.ADMIN
+    val isGuard = userProfile.rol == UserRole.GUARD
     val coroutineScope = rememberCoroutineScope()
     var registeredUsers by remember { mutableStateOf<List<AdminUserItem>>(emptyList()) }
     var isLoadingUsers by remember { mutableStateOf(false) }
     var usersError by remember { mutableStateOf<String?>(null) }
 
-    fun loadRegisteredUsers() {
-        coroutineScope.launch {
+    fun loadRegisteredUsers()
+    {
+        coroutineScope.launch{
             isLoadingUsers = true
             usersError = null
-            try {
+            try
+            {
                 val response = RetrofitClient.getService().obtenerUsuarios()
-                if (response.isSuccessful && response.body() != null) {
+                if(response.isSuccessful && response.body() != null)
+                {
                     registeredUsers = response.body()!!
-                } else {
+                }
+                else
+                {
                     usersError = "Error al cargar usuarios (${response.code()})"
                 }
-            } catch (e: Exception) {
+            }
+            catch(e: Exception)
+            {
                 usersError = "Error de conexión: ${e.localizedMessage}"
-            } finally {
+            }
+            finally
+            {
                 isLoadingUsers = false
             }
         }
     }
 
-    LaunchedEffect(isAdmin) {
-        if (isAdmin) {
+    LaunchedEffect(isAdmin)
+    {
+        if(isAdmin)
+        {
             loadRegisteredUsers()
         }
     }
@@ -130,24 +144,28 @@ fun FamilyProfileScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    )
+    {
         // User Header Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
+        )
+        {
             Row(
                 modifier = Modifier.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
-            ) {
+            )
+            {
                 Box(
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
                         .background(ConfirmButtonColor),
                     contentAlignment = Alignment.Center
-                ) {
+                )
+                {
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
@@ -158,7 +176,8 @@ fun FamilyProfileScreen(
 
                 Spacer(modifier = Modifier.width(14.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f))
+                {
                     Text(
                         text = userProfile.nombre,
                         fontWeight = FontWeight.Bold,
@@ -178,11 +197,13 @@ fun FamilyProfileScreen(
                     Row(
                         modifier = Modifier.padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
+                    )
+                    {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = ConfirmButtonColor.copy(alpha = 0.15f)
-                        ) {
+                        )
+                        {
                             Text(
                                 text = "ROL: ${userProfile.rol.name}",
                                 fontSize = 10.sp,
@@ -192,72 +213,89 @@ fun FamilyProfileScreen(
                             )
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF10B981).copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = "ID VIVIENDA: ${userProfile.numeroVivienda}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF059669),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        if(!isGuard)
+                        {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF10B981).copy(alpha = 0.15f)
                             )
+                            {
+                                Text(
+                                    text = "ID VIVIENDA: ${userProfile.numeroVivienda}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF059669),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Editable Residence Info Card
+        // Editable Contact / Residence Info Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
+        )
+        {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            )
+            {
                 Text(
-                    text = if (StringsHelper.isEnglish(lang)) "Housing & Location Details" else "Datos de la Vivienda y Ubicación",
+                    text = if(isGuard)
+                    {
+                        if(StringsHelper.isEnglish(lang)) "Contact Details" else "Datos de Contacto"
+                    }
+                    else
+                    {
+                        if(StringsHelper.isEnglish(lang)) "Housing & Location Details" else "Datos de la Vivienda y Ubicación"
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                OutlinedTextField(
-                    value = numeroViviendaText,
-                    onValueChange = { numeroViviendaText = it },
-                    label = { Text("Número o ID de Vivienda (DB)") },
-                    leadingIcon = { Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = ConfirmButtonColor) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                OutlinedTextField(
-                    value = viviendaText,
-                    onValueChange = { viviendaText = it },
-                    label = { Text(if (StringsHelper.isEnglish(lang)) "Residence Address" else "Dirección / Referencia Vivienda") },
-                    leadingIcon = { Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, tint = ConfirmButtonColor) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                if (userProfile.ubicacionDireccion.isNotBlank()) {
-                    Text(
-                        text = "📍 Ubicación registrada en mapa: ${userProfile.ubicacionDireccion}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = ConfirmButtonColor
+                if(!isGuard)
+                {
+                    OutlinedTextField(
+                        value = nombreText,
+                        onValueChange = { nombreText = it },
+                        label = { Text(if (StringsHelper.isEnglish(lang)) "Full Name" else "Nombre Completo") },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = ConfirmButtonColor) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     )
+
+                    OutlinedTextField(
+                        value = emailText,
+                        onValueChange = { emailText = it.replace(" ", "") },
+                        label = { Text(if (StringsHelper.isEnglish(lang)) "Email" else "Correo Electrónico") },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = ConfirmButtonColor) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if(userProfile.ubicacionDireccion.isNotBlank())
+                    {
+                        Text(
+                            text = "📍 Ubicación registrada en mapa: ${userProfile.ubicacionDireccion}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = ConfirmButtonColor
+                        )
+                    }
                 }
 
                 OutlinedTextField(
                     value = telefonoText,
-                    onValueChange = { telefonoText = it },
+                    onValueChange = { telefonoText = it.filter { c -> c.isDigit() }.take(10) },
                     label = { Text(if (StringsHelper.isEnglish(lang)) "Contact Phone" else "Teléfono de Contacto") },
                     leadingIcon = { Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = ConfirmButtonColor) },
                     singleLine = true,
@@ -265,165 +303,187 @@ fun FamilyProfileScreen(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Resident count controls
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.People, contentDescription = null, tint = ConfirmButtonColor)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Residentes:",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Button(
-                            onClick = { if (cantidadResidentes > 1) cantidadResidentes-- },
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Text("-", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                if(!isGuard)
+                {
+                    // Resident count controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.People, contentDescription = null, tint = ConfirmButtonColor)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Residentes:",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
                         }
-                        Text(
-                            text = "$cantidadResidentes",
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 14.dp)
-                        )
-                        Button(
-                            onClick = { cantidadResidentes++ },
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Text("+", color = Color.White, fontWeight = FontWeight.Bold)
+
+                        Row(verticalAlignment = Alignment.CenterVertically)
+                        {
+                            Button(
+                                onClick = { if (cantidadResidentes > 1) cantidadResidentes-- },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            {
+                                Text("-", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                            }
+                            Text(
+                                text = "$cantidadResidentes",
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 14.dp)
+                            )
+                            Button(
+                                onClick = { cantidadResidentes++ },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            {
+                                Text("+", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Family Members List Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = if (StringsHelper.isEnglish(lang)) "Family Members" else "Integrantes de la Familia y Parentesco",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+        // Family Members List Card (Solo Residentes y Admin)
+        if(!isGuard)
+        {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            )
+            {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 )
-
-                // Add Member Inputs
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = nuevoNombreFamiliar,
-                        onValueChange = { nuevoNombreFamiliar = it },
-                        placeholder = { Text("Nombre del familiar") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                {
+                    Text(
+                        text = if (StringsHelper.isEnglish(lang)) "Family Members" else "Integrantes de la Familia y Parentesco",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    ExposedDropdownMenuBox(
-                        expanded = parentescoDropdownExpanded,
-                        onExpandedChange = { parentescoDropdownExpanded = !parentescoDropdownExpanded },
-                        modifier = Modifier.weight(0.9f)
-                    ) {
+                    // Add Member Inputs
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    )
+                    {
                         OutlinedTextField(
-                            value = nuevoParentesco,
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = parentescoDropdownExpanded) },
-                            modifier = Modifier.menuAnchor(),
+                            value = nuevoNombreFamiliar,
+                            onValueChange = { nuevoNombreFamiliar = it },
+                            placeholder = { Text("Nombre del familiar") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         )
-                        ExposedDropdownMenu(
+
+                        ExposedDropdownMenuBox(
                             expanded = parentescoDropdownExpanded,
-                            onDismissRequest = { parentescoDropdownExpanded = false }
-                        ) {
-                            parentescoOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option) },
-                                    onClick = {
-                                        nuevoParentesco = option
-                                        parentescoDropdownExpanded = false
-                                    }
-                                )
+                            onExpandedChange = { parentescoDropdownExpanded = !parentescoDropdownExpanded },
+                            modifier = Modifier.weight(0.9f)
+                        )
+                        {
+                            OutlinedTextField(
+                                value = nuevoParentesco,
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = parentescoDropdownExpanded) },
+                                modifier = Modifier.menuAnchor(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = parentescoDropdownExpanded,
+                                onDismissRequest = { parentescoDropdownExpanded = false }
+                            )
+                            {
+                                parentescoOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option) },
+                                        onClick = {
+                                            nuevoParentesco = option
+                                            parentescoDropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
+                        }
+
+                        Button(
+                            onClick = {
+                                if(nuevoNombreFamiliar.isNotBlank())
+                                {
+                                    integrantesList.add("${nuevoNombreFamiliar.trim()} ($nuevoParentesco)")
+                                    nuevoNombreFamiliar = ""
+                                }
+                            },
+                            enabled = nuevoNombreFamiliar.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
+                        )
+                        {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Agregar")
                         }
                     }
 
-                    Button(
-                        onClick = {
-                            if (nuevoNombreFamiliar.isNotBlank()) {
-                                integrantesList.add("${nuevoNombreFamiliar.trim()} ($nuevoParentesco)")
-                                nuevoNombreFamiliar = ""
-                            }
-                        },
-                        enabled = nuevoNombreFamiliar.isNotBlank(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-                    ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Agregar")
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+
+                    if(integrantesList.isEmpty())
+                    {
+                        Text(
+                            text = "Sin integrantes familiares registrados aún.",
+                            fontSize = 12.sp,
+                            color = SubtitleGrayColor
+                        )
                     }
-                }
+                    else
+                    {
+                        integrantesList.forEachIndexed { index, miembro ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            )
+                            {
+                                Row(verticalAlignment = Alignment.CenterVertically)
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = ConfirmButtonColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = miembro,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
 
-                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
-
-                if (integrantesList.isEmpty()) {
-                    Text(
-                        text = "Sin integrantes familiares registrados aún.",
-                        fontSize = 12.sp,
-                        color = SubtitleGrayColor
-                    )
-                } else {
-                    integrantesList.forEachIndexed { index, miembro ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = ConfirmButtonColor,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = miembro,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            IconButton(onClick = { integrantesList.removeAt(index) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Eliminar",
-                                    tint = Color(0xFFEF4444),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                IconButton(onClick = { integrantesList.removeAt(index) })
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Eliminar",
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -431,17 +491,17 @@ fun FamilyProfileScreen(
             }
         }
 
-        if (saveSuccessMessage) {
+        if(saveSuccessMessage)
+        {
             Text(
-                text = "✓ ¡Datos de vivienda y familia guardados y sincronizados en DataStore!",
-                color = Color(0xFF10B981),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        if (saveSuccessMessage) {
-            Text(
-                text = "✓ ¡Datos de vivienda y familia guardados y sincronizados en DataStore!",
+                text = if (isGuard)
+                {
+                    "✓ ¡Datos de perfil guardados correctamente!"
+                }
+                else
+                {
+                    "✓ ¡Datos de vivienda y familia guardados y sincronizados en DataStore!"
+                },
                 color = Color(0xFF10B981),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -449,22 +509,26 @@ fun FamilyProfileScreen(
         }
 
         // --- DIRECTORIO DE USUARIOS REGISTRADOS (SOLO ADMIN) ---
-        if (isAdmin) {
+        if(isAdmin)
+        {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
+            )
+            {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                )
+                {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
+                    )
+                    {
+                        Column{
                             Text(
                                 text = "Usuarios Registrados (BD)",
                                 fontWeight = FontWeight.Bold,
@@ -477,7 +541,8 @@ fun FamilyProfileScreen(
                                 color = SubtitleGrayColor
                             )
                         }
-                        IconButton(onClick = { loadRegisteredUsers() }) {
+                        IconButton(onClick = { loadRegisteredUsers() })
+                        {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "Recargar usuarios",
@@ -488,14 +553,16 @@ fun FamilyProfileScreen(
 
                     HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
 
-                    when {
+                    when
+                    {
                         isLoadingUsers -> {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 16.dp),
                                 contentAlignment = Alignment.Center
-                            ) {
+                            )
+                            {
                                 CircularProgressIndicator(
                                     color = ConfirmButtonColor,
                                     modifier = Modifier.size(28.dp)
@@ -518,7 +585,8 @@ fun FamilyProfileScreen(
                         }
                         else -> {
                             registeredUsers.forEach { u ->
-                                val estadoColor = when (u.estado.lowercase()) {
+                                val estadoColor = when(u.estado.lowercase())
+                                {
                                     "activa" -> Color(0xFF10B981)
                                     "suspendida" -> Color(0xFFF59E0B)
                                     else -> Color(0xFFEF4444)
@@ -528,16 +596,19 @@ fun FamilyProfileScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     color = MaterialTheme.colorScheme.surface
-                                ) {
+                                )
+                                {
                                     Column(
                                         modifier = Modifier.padding(12.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
+                                    )
+                                    {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
-                                        ) {
+                                        )
+                                        {
                                             Text(
                                                 text = "#${u.id} • ${u.nombre}",
                                                 fontWeight = FontWeight.Bold,
@@ -547,7 +618,8 @@ fun FamilyProfileScreen(
                                             Surface(
                                                 shape = RoundedCornerShape(8.dp),
                                                 color = estadoColor.copy(alpha = 0.15f)
-                                            ) {
+                                            )
+                                            {
                                                 Text(
                                                     text = u.estado.uppercase(),
                                                     fontSize = 10.sp,
@@ -565,7 +637,8 @@ fun FamilyProfileScreen(
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
+                                        )
+                                        {
                                             Text(
                                                 text = "Tel: ${u.telefono?.ifBlank { "Sin teléfono" } ?: "Sin teléfono"}",
                                                 fontSize = 11.sp,
@@ -591,12 +664,14 @@ fun FamilyProfileScreen(
             onClick = {
                 onUpdateProfile(
                     userProfile.copy(
-                        numeroVivienda = numeroViviendaText,
-                        vivienda = viviendaText,
-                        ubicacionDireccion = viviendaText,
+                        nombre = if (isGuard) nombreText else userProfile.nombre,
+                        email = if (isGuard) emailText else userProfile.email,
+                        numeroVivienda = if (isGuard) "" else numeroViviendaText,
+                        vivienda = if (isGuard) "" else viviendaText,
+                        ubicacionDireccion = if (isGuard) "" else viviendaText,
                         telefono = telefonoText,
-                        cantidadResidentes = cantidadResidentes,
-                        integrantesFamilia = integrantesList.toList()
+                        cantidadResidentes = if (isGuard) 0 else cantidadResidentes,
+                        integrantesFamilia = if (isGuard) emptyList() else integrantesList.toList()
                     )
                 )
                 saveSuccessMessage = true
@@ -606,7 +681,8 @@ fun FamilyProfileScreen(
                 .height(50.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ConfirmButtonColor)
-        ) {
+        )
+        {
             Text(
                 text = if (StringsHelper.isEnglish(lang)) "Save Profile Changes" else "Guardar Cambios de Perfil",
                 fontSize = 16.sp,
@@ -623,7 +699,8 @@ fun FamilyProfileScreen(
                 .height(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
-        ) {
+        )
+        {
             Text(
                 text = if (StringsHelper.isEnglish(lang)) "Log Out" else "Cerrar Sesión",
                 fontSize = 15.sp,

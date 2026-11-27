@@ -1,10 +1,12 @@
 package com.atom.tecnohandapp.data.models
 
-enum class AppTheme {
+enum class AppTheme
+{
     LIGHT, DARK, SYSTEM
 }
 
-enum class AppLanguage {
+enum class AppLanguage
+{
     SPANISH, ENGLISH
 }
 

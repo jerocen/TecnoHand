@@ -62,3 +62,19 @@ data class AccessLogItem(
     @SerializedName("persona_nombre") val personaNombre: String?,
     @SerializedName("vivienda_direccion") val viviendaDireccion: String?
 )
+
+data class CreateQrRequest(
+    val cuenta_id: Long,
+    val nombre_visitante: String,
+    val telefono_visitante: String = "",
+    val usos_maximos: Int = 1,
+    val duracion_horas: Int = 24
+)
+
+data class CreateQrResponse(
+    val credencial_id: Long,
+    val invitacion_id: Long,
+    val codigo_qr: String,
+    val usos_maximos: Int,
+    val mensaje: String? = null
+)

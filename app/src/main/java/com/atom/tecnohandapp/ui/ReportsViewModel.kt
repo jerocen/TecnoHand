@@ -20,7 +20,8 @@ data class ReportsUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val showCreateDialog: Boolean = false,
-    val selectedReportForDetail: ReportItem? = null
+    val selectedReportForDetail: ReportItem? = null,
+    val selectedPhotoBase64: String? = null // <--- Elimina esta línea
 )
 
 class ReportsViewModel : ViewModel() {
@@ -83,7 +84,7 @@ class ReportsViewModel : ViewModel() {
         }
     }
 
-    fun createReport(categoria: String, descripcion: String, prioridad: String) {
+    fun createReport(categoria: String, descripcion: String, prioridad: String, reportadoPorId: Long, evidenciaBase64: String? = null) {
         if (descripcion.isBlank()) {
             _uiState.update { it.copy(errorMessage = "La descripción no puede estar vacía") }
             return
@@ -97,7 +98,9 @@ class ReportsViewModel : ViewModel() {
                 val request = CreateReportRequest(
                     categoria = categoria,
                     descripcion = descripcion,
-                    prioridad = prioridad
+                    prioridad = prioridad,
+                    reportadoPor = reportadoPorId,
+                    evidenciaBase64 = evidenciaBase64 ?: "SIN_FOTO_DESDE_APP"
                 )
 
                 val response = service.crearIncidente(request)

@@ -22,24 +22,28 @@ data class AlertsUiState(
     val panicTriggered: Boolean = false
 )
 
-class AlertsViewModel : ViewModel() {
-
+class AlertsViewModel : ViewModel()
+{
     private val _uiState = MutableStateFlow(AlertsUiState())
     val uiState: StateFlow<AlertsUiState> = _uiState.asStateFlow()
 
-    init {
+    init
+    {
         loadAlerts()
     }
 
-    fun setFilter(filter: String) {
+    fun setFilter(filter: String)
+    {
         _uiState.update { state ->
             val filtered = filterAlertsList(state.alerts, filter)
             state.copy(selectedFilter = filter, filteredAlerts = filtered)
         }
     }
 
-    private fun filterAlertsList(list: List<AlertItem>, filter: String): List<AlertItem> {
-        return when (filter) {
+    private fun filterAlertsList(list: List<AlertItem>, filter: String): List<AlertItem>
+    {
+        return when (filter)
+        {
             "Críticas" -> list.filter { it.colorNivel == "rojo" || it.prioridad == "urgente" || it.prioridad == "alta" }
             "En Proceso" -> list.filter { it.estadoUi == "En Proceso" || it.colorNivel == "amarillo" }
             "Terminadas" -> list.filter { it.estadoUi == "Terminado" || it.colorNivel == "verde" }
@@ -47,33 +51,40 @@ class AlertsViewModel : ViewModel() {
         }
     }
 
-    fun loadAlerts() {
-        viewModelScope.launch {
+    fun loadAlerts()
+    {
+        viewModelScope.launch{
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            try {
+            try
+            {
                 val service = RetrofitClient.getService()
                 val response = service.obtenerAlertas()
 
-                if (response.isSuccessful && response.body() != null) {
+                if(response.isSuccessful && response.body() != null)
+                {
                     val raw = response.body()!!
-                    _uiState.update { state ->
+                    _uiState.update{ state ->
                         state.copy(
                             isLoading = false,
                             alerts = raw,
                             filteredAlerts = filterAlertsList(raw, state.selectedFilter)
                         )
                     }
-                } else {
-                    _uiState.update {
+                }
+                else
+                {
+                    _uiState.update{
                         it.copy(
                             isLoading = false,
                             errorMessage = "Error al obtener alertas (${response.code()})"
                         )
                     }
                 }
-            } catch (e: Exception) {
-                _uiState.update {
+            }
+            catch(e: Exception)
+            {
+                _uiState.update{
                     it.copy(
                         isLoading = false,
                         errorMessage = "Error de red: ${e.localizedMessage}"
@@ -83,16 +94,19 @@ class AlertsViewModel : ViewModel() {
         }
     }
 
-    fun triggerPanicButton() {
-        viewModelScope.launch {
+    fun triggerPanicButton(reportadoPorId: Long)
+    {
+        viewModelScope.launch{
             _uiState.update { it.copy(isActionLoading = true, errorMessage = null) }
 
-            try {
+            try
+            {
                 val service = RetrofitClient.getService()
                 val response = service.activarPanico()
 
-                if (response.isSuccessful) {
-                    _uiState.update {
+                if(response.isSuccessful)
+                {
+                    _uiState.update{
                         it.copy(
                             isActionLoading = false,
                             panicTriggered = true,
@@ -100,16 +114,20 @@ class AlertsViewModel : ViewModel() {
                         )
                     }
                     loadAlerts()
-                } else {
-                    _uiState.update {
+                }
+                else
+                {
+                    _uiState.update{
                         it.copy(
                             isActionLoading = false,
                             errorMessage = "No se pudo transmitir la alerta de pánico"
                         )
                     }
                 }
-            } catch (e: Exception) {
-                _uiState.update {
+            }
+            catch(e: Exception)
+            {
+                _uiState.update{
                     it.copy(
                         isActionLoading = false,
                         errorMessage = "Error de red al activar pánico: ${e.localizedMessage}"
@@ -119,35 +137,43 @@ class AlertsViewModel : ViewModel() {
         }
     }
 
-    fun markAlertAsResolved(alertId: Long) {
-        viewModelScope.launch {
+    fun markAlertAsResolved(alertId: Long)
+    {
+        viewModelScope.launch{
             _uiState.update { it.copy(isActionLoading = true) }
 
-            try {
+            try
+            {
                 val service = RetrofitClient.getService()
                 val response = service.actualizarEstadoIncidente(
                     id = alertId,
                     request = UpdateReportStatusRequest(estado = "Terminado")
                 )
 
-                if (response.isSuccessful) {
-                    _uiState.update {
+                if(response.isSuccessful)
+                {
+                    _uiState.update{
                         it.copy(
                             isActionLoading = false,
                             successMessage = "Alerta #$alertId marcada como Terminado / Resuelto"
                         )
                     }
                     loadAlerts()
-                } else {
+                }
+                else
+                {
                     _uiState.update { it.copy(isActionLoading = false) }
                 }
-            } catch (e: Exception) {
+            }
+            catch(e: Exception)
+            {
                 _uiState.update { it.copy(isActionLoading = false) }
             }
         }
     }
 
-    fun clearMessages() {
+    fun clearMessages()
+    {
         _uiState.update { it.copy(errorMessage = null, successMessage = null, panicTriggered = false) }
     }
 }

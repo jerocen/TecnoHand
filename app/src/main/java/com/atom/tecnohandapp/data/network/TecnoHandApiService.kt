@@ -5,6 +5,8 @@ import com.atom.tecnohandapp.data.models.AdminUserItem
 import com.atom.tecnohandapp.data.models.AlertItem
 import com.atom.tecnohandapp.data.models.AuthUserResponse
 import com.atom.tecnohandapp.data.models.CrearEncuestaRequest
+import com.atom.tecnohandapp.data.models.CreateQrRequest
+import com.atom.tecnohandapp.data.models.CreateQrResponse
 import com.atom.tecnohandapp.data.models.CreateReportRequest
 import com.atom.tecnohandapp.data.models.EncuestaDto
 import com.atom.tecnohandapp.data.models.GenericApiResponse
@@ -15,6 +17,7 @@ import com.atom.tecnohandapp.data.models.QrValidationRequest
 import com.atom.tecnohandapp.data.models.QrValidationResponse
 import com.atom.tecnohandapp.data.models.RegisterRequest
 import com.atom.tecnohandapp.data.models.ReportItem
+import com.atom.tecnohandapp.data.models.ResetPasswordRequest
 import com.atom.tecnohandapp.data.models.UpdateProfileRequest
 import com.atom.tecnohandapp.data.models.UpdateReportStatusRequest
 import com.atom.tecnohandapp.data.models.VotarRequest
@@ -27,8 +30,8 @@ import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-interface TecnoHandApiService {
-
+interface TecnoHandApiService
+{
     // --- QR Endpoints ---
     @POST("qr/consultar")
     suspend fun consultarQr(
@@ -79,8 +82,8 @@ interface TecnoHandApiService {
     @POST("encuestas/{id}/votar")
     suspend fun votarEncuesta(@Path("id") id: String, @Body body: VotarRequest): Response<Unit>
 
-    @DELETE("encuestas/{id}")
-    suspend fun eliminarEncuesta(@Path("id") id: String): Response<Unit>
+    //@DELETE("encuestas/{id}")
+    //suspend fun eliminarEncuesta(@Path("id") id: String): Response<Unit>
 
     // --- Auth & Perfil Endpoints ---
     @POST("auth/login")
@@ -97,4 +100,13 @@ interface TecnoHandApiService {
         @Path("id") cuentaId: String,
         @Body request: UpdateProfileRequest
     ): Response<GenericApiResponse>
+
+    @POST("qr/crear")
+    suspend fun crearQrInvitado(@Body request: CreateQrRequest): Response<CreateQrResponse>
+
+    @POST("auth/reset-password")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<GenericApiResponse>
+
+    @DELETE("encuestas/{id}")
+    suspend fun eliminarEncuesta(@Path("id") id: String): Response<GenericApiResponse>
 }

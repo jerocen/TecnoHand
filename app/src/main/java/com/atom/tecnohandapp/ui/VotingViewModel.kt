@@ -21,6 +21,7 @@ data class VotingItem(
     val fechaInicio: LocalDateTime = LocalDateTime.now(),
     val fechaCierre: LocalDateTime,
     val votos: Int = 0,
+    val totalViviendas: Int = 1,
     val presupuestoAsignado: String = "Por definir",
     val estado: String = "activa"
 )
@@ -59,7 +60,8 @@ class VotingViewModel : ViewModel() {
                             descripcion = dto.descripcion ?: "",
                             fechaCierre = fechaFinLocal,
                             votos = dto.votos,
-                            presupuestoAsignado = "Por definir",
+                            totalViviendas = dto.total_viviendas.coerceAtLeast(1),
+                            presupuestoAsignado = dto.presupuesto?.ifBlank { "Por definir" } ?: "Por definir",
                             estado = dto.estado
                         )
                     }
@@ -71,17 +73,23 @@ class VotingViewModel : ViewModel() {
         }
     }
 
-    fun registrarVoto(itemId: String) {
-        if (_votedItemIds.value.contains(itemId)) return
+    fun registrarVoto(itemId: String, cuentaId: Long) {
+        val voteKey = "${cuentaId}_${itemId}"
+        if (_votedItemIds.value.contains(voteKey)) return
 
         viewModelScope.launch {
             try {
                 val response = RetrofitClient.getService(RetrofitClient.baseUrl)
-                    .votarEncuesta(itemId, VotarRequest(vivienda_id = 1, emitido_por = 1))
+                    .votarEncuesta(itemId, VotarRequest(vivienda_id = 0, emitido_por = cuentaId))
 
-                if (response.isSuccessful) {
-                    _votedItemIds.update { it + itemId }
-                    cargarEncuestas() // Refresca los votos desde MySQL
+                if (response.isSuccessful || response.code() == 409) {
+                    _votedItemIds.update { it + voteKey }
+                    cargarEncuestas()
+                } else {
+                    android.util.Log.e(
+                        "VotingViewModel",
+                        "Error al votar (${response.code()}): ${response.errorBody()?.string()}"
+                    )
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -97,16 +105,24 @@ class VotingViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             try {
+                val cleanBudget = presupuesto.trim()
+                val descFinal = if (cleanBudget.isNotBlank()) {
+                    "${descripcion.trim()}\n[Presupuesto: $cleanBudget]".trim()
+                } else {
+                    descripcion.trim()
+                }
+
                 val request = CrearEncuestaRequest(
                     titulo = titulo.trim(),
-                    descripcion = descripcion.trim(),
+                    descripcion = descFinal,
+                    presupuesto = presupuesto.trim().ifBlank { "Por definir" },
                     duracion_horas = duracionHoras.coerceAtLeast(1L)
                 )
                 val response = RetrofitClient.getService(RetrofitClient.baseUrl)
                     .crearEncuesta(request)
 
                 if (response.isSuccessful) {
-                    cargarEncuestas() // Trae la nueva encuesta recién guardada en MySQL
+                    cargarEncuestas()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -129,4 +145,10 @@ class VotingViewModel : ViewModel() {
             }
         }
     }
+}
+
+fun extraerMontoPresupuesto(texto: String): Double
+{
+    val limpio = texto.replace(Regex("[^0-9.]"), "")
+    return limpio.toDoubleOrNull() ?: 0.0
 }

@@ -316,40 +316,50 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val bitmap = getResizedBitmap(context, uri, maxDimension = 1080)
-                if (bitmap == null) {
-                    val isEng = _uiState.value.selectedLanguage == AppLanguage.ENGLISH
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            errorMessage = if (isEng) "Could not load selected image." else "No se pudo cargar la imagen seleccionada."
-                        )
+                val image = try {
+                    InputImage.fromFilePath(context, uri)
+                } catch (e: Exception) {
+                    val bitmap = getResizedBitmap(context, uri, maxDimension = 1080)
+                    if (bitmap == null) {
+                        val isEng = _uiState.value.selectedLanguage == AppLanguage.ENGLISH
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = if (isEng) "Could not load selected image." else "No se pudo cargar la imagen seleccionada."
+                            )
+                        }
+                        return@launch
                     }
-                    return@launch
+                    InputImage.fromBitmap(bitmap, 0)
                 }
 
-                val image = InputImage.fromBitmap(bitmap, 0)
-                val barcodeScanner = BarcodeScanning.getClient()
+                val options = com.google.mlkit.vision.barcode.BarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
+                    .build()
+                val barcodeScanner = BarcodeScanning.getClient(options)
 
                 barcodeScanner.process(image)
                     .addOnSuccessListener { barcodes ->
                         val detectedQr = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue
+                        // IMPORTANTE: apagar isLoading antes de llamar a onQrDetected
+                        _uiState.update { it.copy(isLoading = false) }
+                        lastProcessedToken = null
+
                         if (detectedQr != null) {
                             onQrDetected(detectedQr)
                         } else {
                             val isEng = _uiState.value.selectedLanguage == AppLanguage.ENGLISH
                             _uiState.update {
                                 it.copy(
-                                    isLoading = false,
                                     errorMessage = if (isEng) "No QR code detected in the selected image." else "No se detectó ningún código QR en la imagen seleccionada.",
                                     validationResponse = QrValidationResponse(
                                         valido = false,
                                         resultado = "rechazado",
                                         mensaje = if (isEng) "Image without valid QR" else "Imagen sin QR reconocible",
                                         motivo = if (isEng)
-                                            "No readable QR code was found in the photo selected from gallery or camera."
+                                            "No readable QR code was found in the photo selected from gallery."
                                         else
-                                            "No se encontró ningún código QR legible en la foto seleccionada de la galería o cámara."
+                                            "No se encontró ningún código QR legible en la foto seleccionada."
                                     ),
                                     showResultSheet = true
                                 )
@@ -417,6 +427,16 @@ class ScanQrViewModel(application: Application) : AndroidViewModel(application) 
                         viviendaDireccion = finalRes.detalles?.direccion ?: "N/A"
                     )
                 )
+
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        validationResponse = finalRes,
+                        showResultSheet = true,
+                        showManualDialog = false
+                    )
+                }
+                return@launch
             }
 
             try {

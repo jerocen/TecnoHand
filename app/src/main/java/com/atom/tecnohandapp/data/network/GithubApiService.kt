@@ -6,8 +6,8 @@ import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-interface GithubApiService {
-
+interface GithubApiService
+{
     @GET("repos/{owner}/{repo}/commits")
     suspend fun getRepoCommits(
         @Path("owner") owner: String = "jerocen",

@@ -5,10 +5,13 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
+import kotlinx.coroutines.withContext
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -105,6 +108,7 @@ fun ReportsFormScreen(
     formViewModel: FormReportsViewModel = viewModel(),
     reportsViewModel: ReportsViewModel = viewModel(),
     lang: AppLanguage = AppLanguage.SPANISH,
+    currentUserId: Long = 1L,
     onBack: () -> Unit = {}
 ) {
     val uiState by formViewModel.uiState.collectAsState()
@@ -518,9 +522,12 @@ fun ReportsFormScreen(
             // Submit Button
             Button(
                 onClick = {
-                    formViewModel.submitReport(reportsViewModel) {
-                        onBack()
-                    }
+                    formViewModel.submitReport(
+                        context = context,
+                        reportsViewModel = reportsViewModel,
+                        reportadoPorId = currentUserId,
+                        onSuccess = { onBack() }
+                    )
                 },
                 enabled = !uiState.isSubmitting && uiState.descripcion.isNotBlank(),
                 modifier = Modifier
@@ -556,10 +563,19 @@ private fun OsmMapViewContainer(
     onMapClick: (Double, Double) -> Unit
 ) {
     val context = LocalContext.current
+    var isMapReady by remember { mutableStateOf(false) }
 
+    // Inicializa el almacenamiento de osmdroid fuera del hilo principal
     LaunchedEffect(Unit) {
-        Configuration.getInstance().userAgentValue = context.packageName
-        Configuration.getInstance().load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+        withContext(Dispatchers.IO) {
+            Configuration.getInstance().userAgentValue = context.packageName
+            Configuration.getInstance().load(
+                context,
+                context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
+            )
+        }
+        delay(150) // Deja que el formulario termine de dibujarse sin trabarse
+        isMapReady = true
     }
 
     Box(
@@ -567,45 +583,63 @@ private fun OsmMapViewContainer(
             .fillMaxWidth()
             .height(180.dp)
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, BorderGrayColor, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, BorderGrayColor, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
     ) {
-        AndroidView(
-            factory = { ctx ->
-                MapView(ctx).apply {
-                    setTileSource(TileSourceFactory.MAPNIK)
-                    setMultiTouchControls(true)
-                    controller.setZoom(16.5)
-                    controller.setCenter(GeoPoint(latitude, longitude))
+        if (!isMapReady) {
+            CircularProgressIndicator(
+                color = ConfirmButtonColor,
+                modifier = Modifier.size(28.dp),
+                strokeWidth = 2.5.dp
+            )
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    MapView(ctx).apply {
+                        setTileSource(TileSourceFactory.MAPNIK)
+                        setMultiTouchControls(true)
+                        controller.setZoom(16.5)
+                        controller.setCenter(GeoPoint(latitude, longitude))
 
-                    val marker = Marker(this).apply {
-                        position = GeoPoint(latitude, longitude)
-                        title = "Ubicación del Incidente"
-                        snippet = direccion
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    }
-                    overlays.add(marker)
-
-                    val mapEventsReceiver = object : MapEventsReceiver {
-                        override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
-                            if (p != null) {
-                                onMapClick(p.latitude, p.longitude)
-                            }
-                            return true
+                        val marker = Marker(this).apply {
+                            position = GeoPoint(latitude, longitude)
+                            title = "Ubicación del Incidente"
+                            snippet = direccion
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                         }
-                        override fun longPressHelper(p: GeoPoint?): Boolean = false
+                        overlays.add(marker)
+
+                        val mapEventsReceiver = object : MapEventsReceiver {
+                            override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                                if (p != null) {
+                                    onMapClick(p.latitude, p.longitude)
+                                }
+                                return true
+                            }
+                            override fun longPressHelper(p: GeoPoint?): Boolean = false
+                        }
+                        overlays.add(MapEventsOverlay(mapEventsReceiver))
+                        onResume()
                     }
-                    overlays.add(MapEventsOverlay(mapEventsReceiver))
-                }
-            },
-            update = { mapView ->
-                mapView.controller.setCenter(GeoPoint(latitude, longitude))
-                mapView.overlays.filterIsInstance<Marker>().firstOrNull()?.apply {
-                    position = GeoPoint(latitude, longitude)
-                    snippet = direccion
-                }
-                mapView.invalidate()
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+                },
+                update = { mapView ->
+                    val marker = mapView.overlays.filterIsInstance<Marker>().firstOrNull()
+                    val currentPos = marker?.position
+                    if (currentPos == null || currentPos.latitude != latitude || currentPos.longitude != longitude) {
+                        val newPoint = GeoPoint(latitude, longitude)
+                        mapView.controller.setCenter(newPoint)
+                        marker?.position = newPoint
+                        marker?.snippet = direccion
+                        mapView.invalidate()
+                    }
+                },
+                onRelease = { mapView ->
+                    mapView.onPause()
+                    mapView.onDetach()
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }

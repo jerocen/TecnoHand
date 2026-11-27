@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -74,9 +75,8 @@ private val IconBgColor = Color(0xFFF1F5F9)
 sealed class RoleNavTab(val index: Int, val icon: ImageVector, val labelEs: String, val labelEn: String) {
     // Guard Tabs
     object ScanQr : RoleNavTab(0, Icons.Default.QrCodeScanner, "Acceso QR", "QR Access")
-    object GuardReports : RoleNavTab(1, Icons.AutoMirrored.Filled.Assignment, "Reportes", "Reports")
-    object GuardAlerts : RoleNavTab(2, Icons.Default.NotificationsActive, "Alertas", "Alertas")
-    object GuardProfile : RoleNavTab(3, Icons.Default.Person, "Perfil", "Profile")
+    object GuardAlerts : RoleNavTab(1, Icons.Default.NotificationsActive, "Alertas", "Alertas")
+    object GuardProfile : RoleNavTab(2, Icons.Default.Person, "Perfil", "Profile")
 
     // Resident Tabs
     object Voting : RoleNavTab(0, Icons.Default.HowToVote, "Votaciones", "Voting")
@@ -103,21 +103,26 @@ fun MainContainerScreen(
     val lang = scanUiState.selectedLanguage
 
     // Load last logged user session from DataStore on launch
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit)
+    {
         val active = userDataStore.getActiveUser()
-        if (active != null) {
+        if(active != null)
+        {
             currentUserProfile = active
         }
     }
 
-    val isDark = when (scanUiState.selectedTheme) {
+    val isDark = when (scanUiState.selectedTheme)
+    {
         AppTheme.LIGHT -> false
         AppTheme.DARK -> true
         AppTheme.SYSTEM -> isSystemInDarkTheme()
     }
 
-    TecnoHandAppTheme(darkTheme = isDark) {
-        if (currentUserProfile == null) {
+    TecnoHandAppTheme(darkTheme = isDark)
+    {
+        if(currentUserProfile == null)
+        {
             // Show Login Screen
             LoginScreen(
                 lang = lang,
@@ -126,14 +131,21 @@ fun MainContainerScreen(
                     selectedTabIndex = 0
                 }
             )
-        } else {
+        }
+        else
+        {
             // Logged In Application Layout
             val profile = currentUserProfile!!
             val isGuard = profile.rol == UserRole.GUARD
+            val isAdmin = profile.rol == UserRole.ADMIN
+            val currentUserId = profile.id.toLongOrNull() ?: 1L
 
-            val navTabs: List<RoleNavTab> = if (isGuard) {
-                listOf(RoleNavTab.ScanQr, RoleNavTab.GuardReports, RoleNavTab.GuardAlerts, RoleNavTab.GuardProfile)
-            } else {
+            val navTabs: List<RoleNavTab> = if (isGuard)
+            {
+                listOf(RoleNavTab.ScanQr, RoleNavTab.GuardAlerts, RoleNavTab.GuardProfile)
+            }
+            else
+            {
                 listOf(RoleNavTab.Voting, RoleNavTab.CreateQr, RoleNavTab.ResidentReports, RoleNavTab.ResidentAlerts, RoleNavTab.ResidentFamily)
             }
 
@@ -149,7 +161,8 @@ fun MainContainerScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 18.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
-                ) {
+                )
+                {
                     Image(
                         painter = painterResource(id = R.drawable.tecnohand_logo),
                         contentDescription = "Logo TecnoHand",
@@ -158,7 +171,8 @@ fun MainContainerScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.weight(1f))
+                    {
                         Text(
                             text = "TecnoHand",
                             color = if (isDark) Color.White else DarkTextColor,
@@ -212,49 +226,63 @@ fun MainContainerScreen(
                         .fillMaxWidth()
                         .weight(1f),
                     color = if (isDark) Color(0xFF121826) else AppBgColor
-                ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        if (isGuard) {
-                            when (selectedTabIndex) {
+                )
+                {
+                    Box(modifier = Modifier.fillMaxSize())
+                    {
+                        if(isGuard)
+                        {
+                            when(selectedTabIndex)
+                            {
                                 0 -> ScanQrScreen(viewModel = scanQrViewModel)
-                                1 -> ReportsAdminScreen(viewModel = reportsViewModel, lang = lang)
-                                2 -> AlertsNotificationsScreen(viewModel = alertsViewModel, lang = lang)
-                                3 -> FamilyProfileScreen(
+                                1 -> AlertsNotificationsScreen(
+                                    viewModel = alertsViewModel,
+                                    lang = lang,
+                                    canResolve = false,
+                                    currentUserId = currentUserId)
+                                2 -> FamilyProfileScreen(
                                     userProfile = profile,
                                     lang = lang,
                                     onUpdateProfile = { updated ->
                                         currentUserProfile = updated
-                                        coroutineScope.launch {
+                                        coroutineScope.launch{
                                             userDataStore.updateUserProfile(updated)
                                         }
                                     },
                                     onLogout = {
-                                        coroutineScope.launch {
+                                        coroutineScope.launch{
                                             userDataStore.saveLastLoggedUserEmail(null)
                                         }
                                         currentUserProfile = null
                                     }
                                 )
                             }
-                        } else {
-                            when (selectedTabIndex) {
+                        }
+                        else
+                        {
+                            val isAdmin = profile.rol == UserRole.ADMIN
+                            when (selectedTabIndex)
+                            {
                                 //0 -> VotingScreen(lang = lang, votingViewModel = votingViewModel)
                                 0 -> VotingScreen(
                                     lang = lang,
                                     isAdmin = profile.rol == UserRole.ADMIN,
+                                    currentUserId = profile.id.toLongOrNull() ?: 1L,
                                     votingViewModel = votingViewModel
                                 )
                                 1 -> GuestQrGeneratorScreen(userProfile = profile, lang = lang)
-                                2 -> ReportsAdminScreen(viewModel = reportsViewModel, lang = lang)
-                                3 -> AlertsNotificationsScreen(viewModel = alertsViewModel, lang = lang)
+                                2 -> ReportsAdminScreen(viewModel = reportsViewModel, lang = lang, canChangeStatus = isAdmin, currentUserId = currentUserId)
+                                3 -> AlertsNotificationsScreen(viewModel = alertsViewModel, lang = lang, canResolve = isAdmin, currentUserId = currentUserId)
                                 4 -> FamilyProfileScreen(
                                     userProfile = profile,
                                     lang = lang,
                                     onUpdateProfile = { updated ->
                                         currentUserProfile = updated
                                         coroutineScope.launch {
-                                            try {
-                                                if (updated.id.all { it.isDigit() }) {
+                                            try
+                                            {
+                                                if(updated.id.all { it.isDigit() })
+                                                {
                                                     RetrofitClient.getService().actualizarPerfil(
                                                         cuentaId = updated.id,
                                                         request = UpdateProfileRequest(
@@ -263,7 +291,9 @@ fun MainContainerScreen(
                                                         )
                                                     )
                                                 }
-                                            } catch (e: Exception) {
+                                            }
+                                            catch(e: Exception)
+                                            {
                                                 e.printStackTrace()
                                             }
                                             userDataStore.updateUserProfile(updated)
@@ -286,7 +316,8 @@ fun MainContainerScreen(
                     containerColor = if (isDark) Color(0xFF1E293B) else Color.White,
                     tonalElevation = 4.dp,
                     modifier = Modifier.fillMaxWidth()
-                ) {
+                )
+                {
                     navTabs.forEach { tab ->
                         val isSelected = selectedTabIndex == tab.index
                         val tabTitle = if (StringsHelper.isEnglish(lang)) tab.labelEn else tab.labelEs
@@ -319,7 +350,8 @@ fun MainContainerScreen(
         }
 
         // --- Global Settings & History Dialogs ---
-        if (scanUiState.showServerConfigDialog) {
+        if (scanUiState.showServerConfigDialog)
+        {
             FullSettingsDialog(
                 uiState = scanUiState,
                 onDismiss = { scanQrViewModel.setShowServerConfigDialog(false) },
@@ -332,7 +364,8 @@ fun MainContainerScreen(
             )
         }
 
-        if (scanUiState.showHistoryDialog) {
+        if(scanUiState.showHistoryDialog)
+        {
             HistoryDialog(
                 logs = scanUiState.historyLogs,
                 isLoading = scanUiState.isHistoryLoading,

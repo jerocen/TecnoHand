@@ -2,8 +2,8 @@ package com.atom.tecnohandapp.data.local
 
 import com.atom.tecnohandapp.data.models.AppLanguage
 
-object StringsHelper {
-
+object StringsHelper
+{
     fun isEnglish(language: AppLanguage): Boolean = language == AppLanguage.ENGLISH
 
     // --- Navigation Tabs ---

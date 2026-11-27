@@ -1,6 +1,7 @@
 package com.atom.tecnohandapp.data.models
 
-enum class UserRole {
+enum class UserRole
+{
     GUARD,    // Guardia: Escaneo QR, Reportes, Alertas
     RESIDENT,  // Residente/Habitante: Votaciones, Crear QR Invitados, Reportes, Alertas, Mi Familia/Vivienda
     ADMIN
@@ -9,7 +10,8 @@ enum class UserRole {
 data class FamiliaMember(
     val nombre: String = "",
     val parentesco: String = "Familiar"
-) {
+)
+{
     fun toFormattedString(): String = if (parentesco.isNotBlank()) "$nombre ($parentesco)" else nombre
 }
 
@@ -38,26 +40,20 @@ data class LoginRequest(
     val password: String
 )
 
-data class RegisterRequest(
-    val nombre: String,
-    val telefono: String,
-    val email: String,
-    val password: String,
-    val rol: String // "RESIDENT", "GUARD", "ADMIN"
-)
-
 data class UpdateProfileRequest(
     val nombre: String,
     val telefono: String
 )
 
-data class AuthUserResponse(
-    val id: Long,
-    val persona_id: Long,
+data class RegisterRequest(
     val nombre: String,
-    val telefono: String?,
+    val telefono: String,
     val email: String,
-    val rol: String
+    val password: String,
+    val rol: String,
+    val direccion: String,
+    val referencia: String,
+    val colonia: String = "Colonia Los Pinos"
 )
 
 data class AdminUserItem(
@@ -68,4 +64,23 @@ data class AdminUserItem(
     val email: String,
     val rol: String,
     val estado: String
+)
+
+data class AuthUserResponse(
+    val id: Long,
+    val persona_id: Long,
+    val vivienda_id: Long? = null,
+    val colonia_id: Long? = null,
+    val nombre: String,
+    val telefono: String?,
+    val email: String,
+    val rol: String,
+    val direccion: String? = null,
+    val referencia: String? = null,
+    val colonia: String? = null
+)
+
+data class ResetPasswordRequest(
+    val email: String,
+    val newPassword: String
 )

@@ -13,7 +13,8 @@ data class ReportItem(
     @SerializedName("db_estado") val dbEstado: String, // "abierto", "en_proceso", "resuelto"
     @SerializedName("estado_ui") val estadoUi: String, // "Iniciado", "En Proceso", "Terminado"
     @SerializedName("creado_en") val creadoEn: String,
-    @SerializedName("resuelto_en") val resueltoEn: String?
+    @SerializedName("resuelto_en") val resueltoEn: String?,
+    @SerializedName("evidencia_base64") val evidenciaBase64: String? = null
 )
 
 data class CreateReportRequest(
@@ -22,7 +23,8 @@ data class CreateReportRequest(
     @SerializedName("reportado_por") val reportadoPor: Long = 1,
     @SerializedName("categoria") val categoria: String = "seguridad", // "seguridad", "bienestar", "infraestructura"
     @SerializedName("descripcion") val descripcion: String,
-    @SerializedName("prioridad") val prioridad: String = "media"
+    @SerializedName("prioridad") val prioridad: String = "media",
+    @SerializedName("evidencia_base64") val evidenciaBase64: String? = null
 )
 
 data class UpdateReportStatusRequest(

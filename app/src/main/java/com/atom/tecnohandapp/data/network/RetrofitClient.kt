@@ -6,28 +6,37 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-object RetrofitClient {
-
+object RetrofitClient
+{
     // Default base URL for Android emulator accessing local machine host
-    var baseUrl: String = "http://10.0.2.2:3000/api/"
+    //var baseUrl: String = "http://10.0.2.2:3000/api/"
+    var baseUrl: String = "https://flatfoot-underling-slick.ngrok-free.dev/api/"
         private set
 
     private var apiService: TecnoHandApiService? = null
     private var githubApiService: GithubApiService? = null
 
-    fun getService(customUrl: String? = null): TecnoHandApiService {
+    fun getService(customUrl: String? = null): TecnoHandApiService
+    {
         val newUrl = formatUrl(customUrl ?: baseUrl)
 
-        if (apiService == null || baseUrl != newUrl) {
+        if(apiService == null || baseUrl != newUrl)
+        {
             baseUrl = newUrl
 
-            val loggingInterceptor = HttpLoggingInterceptor().apply {
+            val loggingInterceptor = HttpLoggingInterceptor().apply{
                 level = HttpLoggingInterceptor.Level.BODY
             }
 
             val okHttpClient = OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
+                .addInterceptor { chain ->
+                    val request = chain.request().newBuilder()
+                        .addHeader("ngrok-skip-browser-warning", "true")
+                        .build()
+                    chain.proceed(request)
+                }
                 .addInterceptor(loggingInterceptor)
                 .build()
 
@@ -43,8 +52,10 @@ object RetrofitClient {
         return apiService!!
     }
 
-    fun getGithubService(): GithubApiService {
-        if (githubApiService == null) {
+    fun getGithubService(): GithubApiService
+    {
+        if(githubApiService == null)
+        {
             val okHttpClient = OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
@@ -61,15 +72,19 @@ object RetrofitClient {
         return githubApiService!!
     }
 
-    private fun formatUrl(url: String): String {
+    private fun formatUrl(url: String): String
+    {
         var formatted = url.trim()
-        if (!formatted.startsWith("http://") && !formatted.startsWith("https://")) {
+        if(!formatted.startsWith("http://") && !formatted.startsWith("https://"))
+        {
             formatted = "http://$formatted"
         }
-        if (!formatted.endsWith("/")) {
+        if(!formatted.endsWith("/"))
+        {
             formatted = "$formatted/"
         }
-        if (!formatted.endsWith("api/")) {
+        if(!formatted.endsWith("api/"))
+        {
             formatted = "${formatted}api/"
         }
         return formatted

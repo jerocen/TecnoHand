@@ -16,11 +16,12 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "tecnohand_user_datastore")
 
-class UserDataStore(private val context: Context) {
-
+class UserDataStore(private val context: Context)
+{
     private val gson = Gson()
 
-    companion object {
+    companion object
+    {
         private val KEY_REGISTERED_USERS = stringPreferencesKey("registered_users_json")
         private val KEY_LAST_LOGGED_USER_EMAIL = stringPreferencesKey("last_logged_user_email")
 
@@ -68,14 +69,20 @@ class UserDataStore(private val context: Context) {
 
     val registeredUsersFlow: Flow<List<UserProfile>> = context.dataStore.data.map { preferences ->
         val jsonStr = preferences[KEY_REGISTERED_USERS]
-        if (jsonStr.isNullOrBlank()) {
+        if (jsonStr.isNullOrBlank())
+        {
             DEFAULT_USERS
-        } else {
-            try {
+        }
+        else
+        {
+            try
+            {
                 val type = object : TypeToken<List<UserProfile>>() {}.type
                 val parsedUsers: List<UserProfile>? = gson.fromJson(jsonStr, type)
-                if (parsedUsers.isNullOrEmpty()) DEFAULT_USERS else parsedUsers
-            } catch (e: Exception) {
+                if(parsedUsers.isNullOrEmpty()) DEFAULT_USERS else parsedUsers
+            }
+            catch(e: Exception)
+            {
                 DEFAULT_USERS
             }
         }
@@ -85,24 +92,30 @@ class UserDataStore(private val context: Context) {
         preferences[KEY_LAST_LOGGED_USER_EMAIL]
     }
 
-    suspend fun getRegisteredUsers(): List<UserProfile> {
+    suspend fun getRegisteredUsers(): List<UserProfile>
+    {
         return registeredUsersFlow.first()
     }
 
-    suspend fun saveRegisteredUsers(users: List<UserProfile>) {
+    suspend fun saveRegisteredUsers(users: List<UserProfile>)
+    {
         val jsonStr = gson.toJson(users)
         context.dataStore.edit { preferences ->
             preferences[KEY_REGISTERED_USERS] = jsonStr
         }
     }
 
-    suspend fun registerUser(newProfile: UserProfile): Boolean {
+    suspend fun registerUser(newProfile: UserProfile): Boolean
+    {
         val currentUsers = getRegisteredUsers().toMutableList()
         // Check if email already registered
         val existingIndex = currentUsers.indexOfFirst { it.email.equals(newProfile.email, ignoreCase = true) }
-        if (existingIndex >= 0) {
+        if(existingIndex >= 0)
+        {
             currentUsers[existingIndex] = newProfile
-        } else {
+        }
+        else
+        {
             currentUsers.add(newProfile)
         }
         saveRegisteredUsers(currentUsers)
@@ -110,16 +123,19 @@ class UserDataStore(private val context: Context) {
         return true
     }
 
-    suspend fun updateUserProfile(updatedProfile: UserProfile) {
+    suspend fun updateUserProfile(updatedProfile: UserProfile)
+    {
         val currentUsers = getRegisteredUsers().toMutableList()
         val index = currentUsers.indexOfFirst { it.email.equals(updatedProfile.email, ignoreCase = true) || it.id == updatedProfile.id }
-        if (index >= 0) {
+        if(index >= 0)
+        {
             currentUsers[index] = updatedProfile
             saveRegisteredUsers(currentUsers)
         }
     }
 
-    suspend fun authenticateUser(emailInput: String, passwordInput: String): UserProfile? {
+    suspend fun authenticateUser(emailInput: String, passwordInput: String): UserProfile?
+    {
         val users = getRegisteredUsers()
         val trimmedEmail = emailInput.trim()
         val trimmedPassword = passwordInput.trim()
@@ -129,23 +145,29 @@ class UserDataStore(private val context: Context) {
                     (user.password == trimmedPassword || trimmedPassword.isBlank()) // If blank password in quick login or matches password
         }
 
-        if (matchedUser != null) {
+        if(matchedUser != null)
+        {
             saveLastLoggedUserEmail(matchedUser.email)
         }
         return matchedUser
     }
 
-    suspend fun saveLastLoggedUserEmail(email: String?) {
+    suspend fun saveLastLoggedUserEmail(email: String?)
+    {
         context.dataStore.edit { preferences ->
-            if (email == null) {
+            if(email == null)
+            {
                 preferences.remove(KEY_LAST_LOGGED_USER_EMAIL)
-            } else {
+            }
+            else
+            {
                 preferences[KEY_LAST_LOGGED_USER_EMAIL] = email
             }
         }
     }
 
-    suspend fun getActiveUser(): UserProfile? {
+    suspend fun getActiveUser(): UserProfile?
+    {
         val lastEmail = lastLoggedUserEmailFlow.first() ?: return null
         val users = getRegisteredUsers()
         return users.find { it.email.equals(lastEmail, ignoreCase = true) }

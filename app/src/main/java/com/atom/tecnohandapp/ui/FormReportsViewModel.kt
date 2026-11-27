@@ -7,6 +7,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.location.Geocoder
 import android.net.Uri
+import kotlinx.coroutines.withContext
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -29,34 +32,41 @@ data class FormReportsUiState(
     val longitude: Double = -99.133209,
     val isFetchingLocation: Boolean = false,
     val selectedPhotoUri: Uri? = null,
+    val selectedPhotoBase64: String? = null, // <--- Agrega esta línea
     val isSubmitting: Boolean = false,
     val submitSuccess: Boolean = false,
     val errorMessage: String? = null
 )
 
-class FormReportsViewModel : ViewModel() {
-
+class FormReportsViewModel : ViewModel()
+{
     private val _uiState = MutableStateFlow(FormReportsUiState())
+    val selectedPhotoBase64: String? = null
     val uiState: StateFlow<FormReportsUiState> = _uiState.asStateFlow()
 
-    fun setCategoria(apiCat: String, displayCat: String) {
+    fun setCategoria(apiCat: String, displayCat: String)
+    {
         _uiState.update { it.copy(categoria = apiCat, categoriaDisplay = displayCat) }
     }
 
-    fun setDescripcion(text: String) {
+    fun setDescripcion(text: String)
+    {
         _uiState.update { it.copy(descripcion = text) }
     }
 
-    fun setDireccion(text: String) {
+    fun setDireccion(text: String)
+    {
         _uiState.update { it.copy(direccion = text) }
     }
 
-    fun setPrioridad(prio: String) {
+    fun setPrioridad(prio: String)
+    {
         _uiState.update { it.copy(prioridad = prio) }
     }
 
-    fun setLocationCoordinates(lat: Double, lng: Double, address: String? = null) {
-        _uiState.update {
+    fun setLocationCoordinates(lat: Double, lng: Double, address: String? = null)
+    {
+        _uiState.update{
             it.copy(
                 latitude = lat,
                 longitude = lng,
@@ -65,43 +75,54 @@ class FormReportsViewModel : ViewModel() {
         }
     }
 
-    fun fetchCurrentGpsLocation(context: Context) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+    fun fetchCurrentGpsLocation(context: Context)
+    {
+        if(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+        {
             _uiState.update { it.copy(errorMessage = "Se requieren permisos de ubicación GPS.") }
             return
         }
 
         _uiState.update { it.copy(isFetchingLocation = true, errorMessage = null) }
 
-        try {
+        try
+        {
             val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
+                if(location != null)
+                {
                     val lat = location.latitude
                     val lng = location.longitude
 
                     var addressText = "Lat: %.4f, Lng: %.4f".format(lat, lng)
-                    try {
+                    try
+                    {
                         val geocoder = Geocoder(context, Locale.getDefault())
                         @Suppress("DEPRECATION")
                         val addresses = geocoder.getFromLocation(lat, lng, 1)
-                        if (!addresses.isNullOrEmpty()) {
+                        if(!addresses.isNullOrEmpty())
+                        {
                             val addr = addresses[0]
                             val thoroughfare = addr.thoroughfare ?: ""
                             val locality = addr.subLocality ?: addr.locality ?: ""
                             val formatted = "$thoroughfare, $locality".trim(',', ' ')
-                            if (formatted.isNotBlank()) {
+                            if(formatted.isNotBlank())
+                            {
                                 addressText = formatted
-                            } else {
+                            }
+                            else
+                            {
                                 addressText = addr.getAddressLine(0) ?: addressText
                             }
                         }
-                    } catch (e: Exception) {
+                    }
+                    catch(e: Exception)
+                    {
                         // Fallback
                     }
 
-                    _uiState.update {
+                    _uiState.update{
                         it.copy(
                             isFetchingLocation = false,
                             latitude = lat,
@@ -109,8 +130,10 @@ class FormReportsViewModel : ViewModel() {
                             direccion = addressText
                         )
                     }
-                } else {
-                    _uiState.update {
+                }
+                else
+                {
+                    _uiState.update{
                         it.copy(
                             isFetchingLocation = false,
                             errorMessage = "Obteniendo coordenadas GPS... Asegúrese de tener el GPS activado."
@@ -118,14 +141,16 @@ class FormReportsViewModel : ViewModel() {
                     }
                 }
             }.addOnFailureListener { e ->
-                _uiState.update {
+                _uiState.update{
                     it.copy(
                         isFetchingLocation = false,
                         errorMessage = "Error GPS: ${e.localizedMessage}"
                     )
                 }
             }
-        } catch (e: Exception) {
+        }
+        catch(e: Exception)
+        {
             _uiState.update {
                 it.copy(
                     isFetchingLocation = false,
@@ -135,8 +160,10 @@ class FormReportsViewModel : ViewModel() {
         }
     }
 
-    private fun getResizedReportBitmap(context: Context, uri: Uri, maxDimension: Int = 1920): Bitmap? {
-        return try {
+    private fun getResizedReportBitmap(context: Context, uri: Uri, maxDimension: Int = 1920): Bitmap?
+    {
+        return try
+        {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeStream(inputStream, null, options)
@@ -147,7 +174,7 @@ class FormReportsViewModel : ViewModel() {
                 sampleSize *= 2
             }
 
-            val scaleOptions = BitmapFactory.Options().apply {
+            val scaleOptions = BitmapFactory.Options().apply{
                 inSampleSize = sampleSize
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
@@ -156,25 +183,37 @@ class FormReportsViewModel : ViewModel() {
             val bitmap = BitmapFactory.decodeStream(scaledStream, null, scaleOptions)
             scaledStream.close()
             bitmap
-        } catch (e: Exception) {
+        }
+        catch(e: Exception)
+        {
             null
         }
     }
 
     fun setSelectedPhotoUri(context: Context?, uri: Uri?) {
         if (uri == null || context == null) {
-            _uiState.update { it.copy(selectedPhotoUri = null) }
+            _uiState.update { it.copy(selectedPhotoUri = null, selectedPhotoBase64 = null) }
             return
         }
 
+        _uiState.update { it.copy(selectedPhotoUri = uri, errorMessage = null) }
         viewModelScope.launch(Dispatchers.IO) {
-            // Process high-resolution image safely (up to 30MB / 3000x3000px)
-            val bitmap = getResizedReportBitmap(context, uri, maxDimension = 1920)
-            _uiState.update { it.copy(selectedPhotoUri = uri) }
+            val (base64Str, err) = uriToBase64(context, uri)
+            _uiState.update {
+                it.copy(
+                    selectedPhotoBase64 = base64Str,
+                    errorMessage = err
+                )
+            }
         }
     }
 
-    fun submitReport(reportsViewModel: ReportsViewModel, onSuccess: () -> Unit) {
+    fun submitReport(
+        context: Context,
+        reportsViewModel: ReportsViewModel,
+        reportadoPorId: Long,
+        onSuccess: () -> Unit
+    ) {
         val state = _uiState.value
         if (state.descripcion.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Por favor ingrese la descripción del incidente.") }
@@ -183,6 +222,22 @@ class FormReportsViewModel : ViewModel() {
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, errorMessage = null) }
+
+            // Convierte la foto en este momento si aún no está lista en Base64
+            var base64Final = state.selectedPhotoBase64
+            if (base64Final == null && state.selectedPhotoUri != null) {
+                val (converted, err) = withContext(Dispatchers.IO) {
+                    uriToBase64(context, state.selectedPhotoUri)
+                }
+                if (converted == null) {
+                    _uiState.update {
+                        it.copy(isSubmitting = false, errorMessage = err ?: "No se pudo procesar la foto")
+                    }
+                    return@launch
+                }
+                base64Final = converted
+            }
+            android.util.Log.d("FOTO_DEBUG", "Enviando reporte. Base64 final: ${base64Final?.length ?: "NULL"}")
 
             val fullDescription = if (state.direccion.isNotBlank()) {
                 "${state.descripcion} [GPS: ${state.latitude}, ${state.longitude} | Ubicación: ${state.direccion}]"
@@ -193,7 +248,9 @@ class FormReportsViewModel : ViewModel() {
             reportsViewModel.createReport(
                 categoria = state.categoria,
                 descripcion = fullDescription,
-                prioridad = state.prioridad
+                prioridad = state.prioridad,
+                reportadoPorId = reportadoPorId,
+                evidenciaBase64 = base64Final
             )
 
             _uiState.update {
@@ -201,7 +258,8 @@ class FormReportsViewModel : ViewModel() {
                     isSubmitting = false,
                     submitSuccess = true,
                     descripcion = "",
-                    selectedPhotoUri = null
+                    selectedPhotoUri = null,
+                    selectedPhotoBase64 = null
                 )
             }
 
@@ -209,7 +267,43 @@ class FormReportsViewModel : ViewModel() {
         }
     }
 
-    fun clearMessages() {
+    private fun uriToBase64(context: Context, uri: Uri): Pair<String?, String?> {
+        return try {
+            val stream = context.contentResolver.openInputStream(uri)
+                ?: return Pair(null, "No se pudo abrir la foto (stream null)")
+
+            val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+            val originalBitmap = stream.use { BitmapFactory.decodeStream(it, null, options) }
+                ?: return Pair(null, "Android no pudo decodificar la imagen")
+
+            val maxDim = 800
+            val ratio = minOf(
+                maxDim.toFloat() / originalBitmap.width,
+                maxDim.toFloat() / originalBitmap.height,
+                1f
+            )
+            val scaledBitmap = if (ratio < 1f) {
+                Bitmap.createScaledBitmap(
+                    originalBitmap,
+                    (originalBitmap.width * ratio).toInt().coerceAtLeast(1),
+                    (originalBitmap.height * ratio).toInt().coerceAtLeast(1),
+                    true
+                )
+            } else {
+                originalBitmap
+            }
+
+            val outputStream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 65, outputStream)
+            val base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+            Pair(base64, null)
+        } catch (e: Throwable) {
+            Pair(null, "Error foto: ${e.javaClass.simpleName} - ${e.message}")
+        }
+    }
+
+    fun clearMessages()
+    {
         _uiState.update { it.copy(errorMessage = null, submitSuccess = false) }
     }
 }

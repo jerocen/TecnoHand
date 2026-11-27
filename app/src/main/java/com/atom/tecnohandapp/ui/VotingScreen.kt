@@ -5,6 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Refresh
+import java.text.NumberFormat
+import java.util.Locale
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -72,6 +77,7 @@ private val SubtitleTextBlue = Color(0xFF6E78A0)
 fun VotingScreen(
     lang: AppLanguage = AppLanguage.SPANISH,
     isAdmin: Boolean = false,
+    currentUserId: Long = 1L,
     votingViewModel: VotingViewModel = viewModel()
 ) {
     var mainTabSelected by remember { mutableIntStateOf(0) }
@@ -85,7 +91,7 @@ fun VotingScreen(
 
     val votingList by votingViewModel.votingList.collectAsState()
     val votedItemIds by votingViewModel.votedItemIds.collectAsState()
-    val totalViviendas = votingViewModel.totalViviendas
+    //val totalViviendas = votingViewModel.totalViviendas
 
     var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
@@ -118,6 +124,19 @@ fun VotingScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
+
+            IconButton(
+                onClick = { votingViewModel.cargarEncuestas() },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Refrescar",
+                    tint = Color.White
+                )
+            }
         }
 
         Box(
@@ -196,9 +215,8 @@ fun VotingScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 items(filteredList, key = { it.id }) { item ->
-                                    val isVoted = votedItemIds.contains(item.id)
-                                    val porcentaje = (item.votos.toFloat() / totalViviendas).coerceIn(0f, 1f)
-
+                                    val isVoted = votedItemIds.contains("${currentUserId}_${item.id}")
+                                    val porcentaje = (item.votos.toFloat() / item.totalViviendas.coerceAtLeast(1)).coerceIn(0f, 1f)
                                     VotingCardItem(
                                         item = item,
                                         porcentaje = porcentaje,
@@ -232,9 +250,13 @@ fun VotingScreen(
 
                 2 -> {
                     val totalVotosEmitidos = votingList.sumOf { it.votos }
+                    val totalPresupuesto = votingList.sumOf { extraerMontoPresupuesto(it.presupuestoAsignado) }
+                    val formattedBudget = NumberFormat.getNumberInstance(Locale.US).format(totalPresupuesto.toLong())
 
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
@@ -245,7 +267,7 @@ fun VotingScreen(
                         )
 
                         votingList.forEach { item ->
-                            val porcentaje = (item.votos.toFloat() / totalViviendas).coerceIn(0f, 1f)
+                            val porcentaje = (item.votos.toFloat() / item.totalViviendas.coerceAtLeast(1)).coerceIn(0f, 1f)
 
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(
@@ -265,7 +287,7 @@ fun VotingScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-
+                                Spacer(modifier = Modifier.height(8.dp))
                                 LinearProgressIndicator(
                                     progress = { porcentaje },
                                     modifier = Modifier
@@ -302,7 +324,7 @@ fun VotingScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "$1,200,000 MXN",
+                                    text = "$$formattedBudget MXN",
                                     color = Color.White,
                                     fontSize = 32.sp,
                                     fontWeight = FontWeight.Bold
@@ -482,7 +504,7 @@ fun VotingScreen(
 
                     Button(
                         onClick = {
-                            votingViewModel.registrarVoto(item.id)
+                            votingViewModel.registrarVoto(item.id, currentUserId)
                             voteSuccessMessage = "¡Voto registrado para '${item.titulo}'!"
                             selectedItemForVote = null
                         },
@@ -706,6 +728,7 @@ private fun VotingCardItem(
                 color = if (isClosed || (duration.toHours() == 0L && duration.toMinutes() < 5)) Color.Red else SubtitleTextBlue,
                 fontWeight = if (isClosed) FontWeight.Bold else FontWeight.Normal
             )
+
 
             Spacer(modifier = Modifier.height(10.dp))
 

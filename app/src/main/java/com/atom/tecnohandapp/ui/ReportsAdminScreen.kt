@@ -7,6 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -69,7 +79,9 @@ private val TerminadoColor = Color(0xFF10B981) // Verde
 @Composable
 fun ReportsAdminScreen(
     viewModel: ReportsViewModel = viewModel(),
-    lang: AppLanguage = AppLanguage.SPANISH
+    lang: AppLanguage = AppLanguage.SPANISH,
+    canChangeStatus: Boolean = false,
+    currentUserId: Long = 1L
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val tabs = listOf(
@@ -78,15 +90,25 @@ fun ReportsAdminScreen(
         StringsHelper.tabInProgress(lang),
         StringsHelper.tabCompleted(lang)
     )
+    val selectedTabIndex = tabs.indexOf(uiState.selectedTab).coerceAtLeast(0)
     var showFormScreen by remember { mutableStateOf(false) }
 
     if (showFormScreen) {
         ReportsFormScreen(
             reportsViewModel = viewModel,
             lang = lang,
+            currentUserId = currentUserId,
             onBack = { showFormScreen = false }
         )
         return
+    }
+
+    // Filtrar la lista según la pestaña activa
+    val displayedReports = when (selectedTabIndex) {
+        1 -> uiState.reports.filter { it.estadoUi.equals("Iniciado", ignoreCase = true) }
+        2 -> uiState.reports.filter { it.estadoUi.equals("En Proceso", ignoreCase = true) }
+        3 -> uiState.reports.filter { it.estadoUi.equals("Terminado", ignoreCase = true) }
+        else -> uiState.reports
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -128,7 +150,7 @@ fun ReportsAdminScreen(
 
             // State Filter Tabs
             PrimaryTabRow(
-                selectedTabIndex = tabs.indexOf(uiState.selectedTab).coerceAtLeast(0),
+                selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 contentColor = ConfirmButtonColor,
                 modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
@@ -162,7 +184,7 @@ fun ReportsAdminScreen(
                 ) {
                     CircularProgressIndicator(color = ConfirmButtonColor)
                 }
-            } else if (uiState.reports.isEmpty()) {
+            } else if (displayedReports.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -183,11 +205,16 @@ fun ReportsAdminScreen(
                         .fillMaxWidth()
                         .weight(1f)
                 ) {
-                    items(uiState.reports) { report ->
+                    items(displayedReports) { report ->
                         ReportCardItem(
                             report = report,
                             lang = lang,
-                            onStatusChangeClick = { viewModel.setSelectedReportDetail(report) }
+                            canChangeStatus = canChangeStatus,
+                            onStatusChangeClick = {
+                                if (canChangeStatus) {
+                                    viewModel.setSelectedReportDetail(report)
+                                }
+                            }
                         )
                     }
                 }
@@ -208,7 +235,7 @@ fun ReportsAdminScreen(
         }
     }
 
-    if (uiState.selectedReportForDetail != null) {
+    if (canChangeStatus && uiState.selectedReportForDetail != null) {
         UpdateStatusDialog(
             report = uiState.selectedReportForDetail!!,
             lang = lang,
@@ -224,6 +251,7 @@ fun ReportsAdminScreen(
 private fun ReportCardItem(
     report: ReportItem,
     lang: AppLanguage,
+    canChangeStatus: Boolean,
     onStatusChangeClick: () -> Unit
 ) {
     val (statusColor, statusIcon) = when (report.estadoUi) {
@@ -236,7 +264,7 @@ private fun ReportCardItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onStatusChangeClick() },
+            .clickable(enabled = canChangeStatus) { onStatusChangeClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -249,7 +277,6 @@ private fun ReportCardItem(
             ) {
                 // Category & Housing
                 Text(
-                    //text = "${report.categoria.uppercase()} • ${report.viviendaDireccion}",
                     text = "${report.categoria.uppercase()} • ${report.viviendaDireccion ?: "Área común"}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -284,6 +311,26 @@ private fun ReportCardItem(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            val priorityColor = when (report.prioridad.lowercase()) {
+                "urgente", "alta" -> Color(0xFFEF4444)
+                "media" -> Color(0xFFF59E0B)
+                else -> Color(0xFF10B981)
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = priorityColor.copy(alpha = 0.14f)
+            ) {
+                Text(
+                    text = "Prioridad: ${report.prioridad.uppercase()}",
+                    color = priorityColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
             // Description
             Text(
                 text = report.descripcion,
@@ -291,6 +338,31 @@ private fun ReportCardItem(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium
             )
+            if (!report.evidenciaBase64.isNullOrBlank()) {
+                val imageBitmap by produceState<ImageBitmap?>(initialValue = null, report.evidenciaBase64) {
+                    value = withContext(Dispatchers.Default) {
+                        try {
+                            val bytes = Base64.decode(report.evidenciaBase64, Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                }
+
+                if (imageBitmap != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Image(
+                        bitmap = imageBitmap!!,
+                        contentDescription = "Evidencia del reporte",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
@@ -308,13 +380,15 @@ private fun ReportCardItem(
                     color = SubtitleGrayColor
                 )
 
-                TextButton(onClick = onStatusChangeClick) {
-                    Text(
-                        text = StringsHelper.changeStatus(lang),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ConfirmButtonColor
-                    )
+                if (canChangeStatus) {
+                    TextButton(onClick = onStatusChangeClick) {
+                        Text(
+                            text = StringsHelper.changeStatus(lang),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ConfirmButtonColor
+                        )
+                    }
                 }
             }
         }
@@ -346,6 +420,30 @@ private fun UpdateStatusDialog(
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Medium
                 )
+                if (!report.evidenciaBase64.isNullOrBlank()) {
+                    val imageBitmap = remember(report.evidenciaBase64) {
+                        try {
+                            val bytes = Base64.decode(report.evidenciaBase64, Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+
+                    if (imageBitmap != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Image(
+                            bitmap = imageBitmap,
+                            contentDescription = "Evidencia del reporte",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = StringsHelper.currentStatus(lang, report.estadoUi),
