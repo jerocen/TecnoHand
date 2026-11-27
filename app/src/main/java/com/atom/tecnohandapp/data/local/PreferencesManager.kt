@@ -16,12 +16,22 @@ class PreferencesManager(context: Context)
         private const val KEY_LANGUAGE = "app_language"
         private const val KEY_OFFLINE_DEMO = "offline_demo_mode"
         //private const val DEFAULT_URL = "http://10.0.2.2:3000/api/"
-        private const val DEFAULT_URL = "https://flatfoot-underling-slick.ngrok-free.dev/api/"
+        //private const val DEFAULT_URL = "https://flatfoot-underling-slick.ngrok-free.dev/api/"
+        private const val DEFAULT_URL = "https://api-tecnohand.onrender.com/api/"
     }
 
     fun getServerUrl(): String
     {
-        return prefs.getString(KEY_SERVER_URL, DEFAULT_URL) ?: DEFAULT_URL
+        val saved = prefs.getString(KEY_SERVER_URL, DEFAULT_URL) ?: DEFAULT_URL
+        //return prefs.getString(KEY_SERVER_URL, DEFAULT_URL) ?: DEFAULT_URL
+        return if(saved.contains("ngrok") || saved.contains("10.0.2.2"))
+        {
+            DEFAULT_URL
+        }
+        else
+        {
+            saved
+        }
     }
 
     fun setServerUrl(url: String)

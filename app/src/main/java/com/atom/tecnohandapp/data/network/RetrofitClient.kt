@@ -10,7 +10,8 @@ object RetrofitClient
 {
     // Default base URL for Android emulator accessing local machine host
     //var baseUrl: String = "http://10.0.2.2:3000/api/"
-    var baseUrl: String = "https://flatfoot-underling-slick.ngrok-free.dev/api/"
+    //var baseUrl: String = "https://flatfoot-underling-slick.ngrok-free.dev/api/"
+    var baseUrl: String = "https://api-tecnohand.onrender.com/api/"
         private set
 
     private var apiService: TecnoHandApiService? = null
@@ -29,14 +30,9 @@ object RetrofitClient
             }
 
             val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
-                .addInterceptor { chain ->
-                    val request = chain.request().newBuilder()
-                        .addHeader("ngrok-skip-browser-warning", "true")
-                        .build()
-                    chain.proceed(request)
-                }
+                .connectTimeout(60, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
                 .addInterceptor(loggingInterceptor)
                 .build()
 
